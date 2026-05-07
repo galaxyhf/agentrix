@@ -5,7 +5,6 @@ export function MainWorkspace() {
   const agents = useAppStore((state) => state.agents);
   const activeAgentId = useAppStore((state) => state.activeAgentId);
   const setActiveAgent = useAppStore((state) => state.setActiveAgent);
-  const addAgent = useAppStore((state) => state.addAgent);
 
   const columns = agents.length <= 1 ? 1 : 2;
   const rows = Math.max(1, Math.ceil(agents.length / columns));
@@ -16,17 +15,11 @@ export function MainWorkspace() {
         <section className="grid min-h-0 flex-1 place-items-center bg-terminal-bg p-8">
           <div className="max-w-sm text-center">
             <h2 className="text-sm font-medium text-text">
-              Nenhum terminal aberto
+              Nenhum workspace aberto
             </h2>
             <p className="mt-2 text-xs text-text-muted">
-              Crie um novo terminal para começar a interagir com seus agentes.
+              Selecione a pasta do projeto na sidebar e crie um workspace Codex ou Claude. Cada workspace abrira um terminal nessa pasta e iniciara o CLI escolhido.
             </p>
-            <button
-              className="mt-4 rounded-md border bg-surface px-3 py-2 text-xs text-text hover:bg-card"
-              onClick={() => addAgent("CODER")}
-            >
-              Novo terminal
-            </button>
           </div>
         </section>
       </main>

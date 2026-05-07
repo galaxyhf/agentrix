@@ -5,6 +5,7 @@ export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "
 
 export interface Agent {
   id: string;
+  workspace_id: string | null;
   name: string;
   role: AgentRole;
   model: AgentModel;
@@ -13,6 +14,7 @@ export interface Agent {
   color: string;
   session_id: string | null;
   tokens: TokenUsage;
+  pending_command?: string | null;
 }
 
 export interface AgentTemplate {

@@ -1,23 +1,15 @@
-import { Database, Plus, Settings, TerminalSquare, Trash2 } from "lucide-react";
+import { Bot, Database, FolderOpen, Plus, Settings, TerminalSquare, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ROLE_LABELS } from "@/lib/constants";
+import { isTauri, stopAgentSession } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
-import { stopAgentSession } from "@/lib/tauri";
 import { useAppStore } from "@/store/app-store";
 import type { AgentStatus } from "@/lib/types";
 
@@ -35,11 +27,12 @@ export function Sidebar() {
   const workspaces = useAppStore((state) => state.workspaces);
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const agents = useAppStore((state) => state.agents);
-  const activeAgentId = useAppStore((state) => state.activeAgentId);
   const connections = useAppStore((state) => state.connections);
-  const setActiveAgent = useAppStore((state) => state.setActiveAgent);
-  const addAgent = useAppStore((state) => state.addAgent);
-  const removeAgent = useAppStore((state) => state.removeAgent);
+  const settings = useAppStore((state) => state.settings);
+  const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
+  const addWorkspace = useAppStore((state) => state.addWorkspace);
+  const removeWorkspace = useAppStore((state) => state.removeWorkspace);
+  const updateSettings = useAppStore((state) => state.updateSettings);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
 
   const totalTokens = agents.reduce(
@@ -51,12 +44,33 @@ export function Sidebar() {
     0,
   );
 
-  async function deleteAgent(agentId: string) {
-    const agent = agents.find((item) => item.id === agentId);
-    if (agent?.session_id && !agent.session_id.startsWith("preview-")) {
-      await stopAgentSession(agent.session_id);
+  function agentForWorkspace(workspaceId: string) {
+    return agents.find((agent) => agent.workspace_id === workspaceId);
+  }
+
+  async function deleteWorkspace(workspaceId: string) {
+    const workspaceAgents = agents.filter((agent) => agent.workspace_id === workspaceId);
+    for (const agent of workspaceAgents) {
+      if (agent.session_id && !agent.session_id.startsWith("preview-")) {
+        await stopAgentSession(agent.session_id);
+      }
     }
-    removeAgent(agentId);
+    removeWorkspace(workspaceId);
+  }
+
+  async function chooseProjectFolder() {
+    if (!isTauri()) {
+      return;
+    }
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    const selected = await open({
+      directory: true,
+      multiple: false,
+      title: "Selecionar pasta do projeto",
+    });
+    if (typeof selected === "string") {
+      updateSettings({ defaultProjectsPath: selected });
+    }
   }
 
   return (
@@ -72,67 +86,67 @@ export function Sidebar() {
       </div>
 
       <div className="space-y-3 border-b p-3">
-        <Select value={activeWorkspaceId}>
-          <SelectTrigger aria-label="Workspace selector">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {workspaces.map((workspace) => (
-              <SelectItem value={workspace.id} key={workspace.id}>
-                {workspace.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Button className="w-full" variant="outline" onClick={() => void chooseProjectFolder()} disabled={!isTauri()}>
+          <FolderOpen />
+          Pasta do projeto
+        </Button>
+        <div className="rounded-md border bg-background p-3">
+          <p className="text-xs text-text-muted">Projeto selecionado</p>
+          <p className="mt-1 truncate text-xs text-text">{settings.defaultProjectsPath || "Nenhuma pasta selecionada"}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Button onClick={() => addWorkspace("codex")} disabled={!settings.defaultProjectsPath}>
+            <Plus />
+            Codex
+          </Button>
+          <Button onClick={() => addWorkspace("claude-code")} disabled={!settings.defaultProjectsPath}>
+            <Bot />
+            Claude
+          </Button>
+        </div>
         <div className="flex items-center justify-between text-xs text-text-muted">
-          <span>Offline sync</span>
-          <Badge variant={workspaces[0]?.synced ? "success" : "secondary"}>
-            {workspaces[0]?.synced ? "synced" : "local"}
-          </Badge>
+          <span>Workspaces ativos</span>
+          <Badge variant="secondary">{workspaces.length}</Badge>
         </div>
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-2 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs uppercase text-text-muted">Agentes</p>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => addAgent("CODER")}
-                  aria-label="Novo agente"
-                >
-                  <Plus />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Novo agente</TooltipContent>
-            </Tooltip>
-          </div>
+          <p className="mb-2 text-xs uppercase text-text-muted">Workspaces</p>
 
-          {agents.map((agent) => (
+          {workspaces.length === 0 && (
+            <div className="rounded-md border bg-background p-3 text-xs text-text-muted">
+              Selecione uma pasta para abrir um terminal dentro dela.
+            </div>
+          )}
+
+          {workspaces.map((workspace) => {
+            const agent = agentForWorkspace(workspace.id);
+            return (
             <div
-              key={agent.id}
+              key={workspace.id}
               className={cn(
                 "w-full rounded-md border bg-background p-3 transition-colors hover:bg-card",
-                activeAgentId === agent.id && "border-accent bg-card",
+                activeWorkspaceId === workspace.id && "border-accent bg-card",
               )}
             >
               <button
                 className="w-full text-left"
-                onClick={() => setActiveAgent(agent.id)}
+                onClick={() => setActiveWorkspace(workspace.id)}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate text-sm font-medium">
-                    {agent.name}
+                    {workspace.name}
                   </span>
-                  <Badge variant={statusVariant[agent.status]}>
-                    {agent.status}
+                  <Badge variant={statusVariant[agent?.status ?? "idle"]}>
+                    {agent?.status ?? "idle"}
                   </Badge>
                 </div>
+                <p className="mt-2 truncate text-xs text-text-muted">
+                  {workspace.path}
+                </p>
                 <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-                  <span>{ROLE_LABELS[agent.role]}</span>
+                  <span>{agent?.model === "claude-code" ? "Claude" : "Codex"}</span>
                   <span>terminal</span>
                 </div>
               </button>
@@ -143,8 +157,8 @@ export function Sidebar() {
                       size="icon"
                       variant="ghost"
                       className="size-7"
-                      onClick={() => void deleteAgent(agent.id)}
-                      aria-label={`Excluir ${agent.name}`}
+                      onClick={() => void deleteWorkspace(workspace.id)}
+                      aria-label={`Excluir ${workspace.name}`}
                     >
                       <Trash2 />
                     </Button>
@@ -153,7 +167,8 @@ export function Sidebar() {
                 </Tooltip>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </ScrollArea>
 

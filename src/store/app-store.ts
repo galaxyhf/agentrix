@@ -44,9 +44,10 @@ const defaultSettings: AgentrixSettings = {
   backendLogLevel: "info",
 };
 
-const createAgent = (role: AgentRole, index: number): Agent => ({
+const createAgent = (role: AgentRole, index: number, workspaceId: string | null = null, name?: string): Agent => ({
   id: id(),
-  name: `${role.charAt(0)}${role.slice(1).toLowerCase()} ${index}`,
+  workspace_id: workspaceId,
+  name: name ?? `${role.charAt(0)}${role.slice(1).toLowerCase()} ${index}`,
   role,
   model: role === "RESEARCHER" ? "claude-code" : "codex",
   system_prompt: ROLE_PROMPTS[role],
@@ -54,6 +55,7 @@ const createAgent = (role: AgentRole, index: number): Agent => ({
   color: DEFAULT_TEMPLATES.find((template) => template.role === role)?.color ?? "accent",
   session_id: null,
   tokens: { ...emptyUsage },
+  pending_command: null,
 });
 
 const fallbackAgentId = "no-terminal-selected";
@@ -72,6 +74,10 @@ interface AppState {
   setAuthenticated: (authenticated: boolean) => void;
   setSettingsOpen: (open: boolean) => void;
   setActiveAgent: (agentId: string) => void;
+  setActiveWorkspace: (workspaceId: string) => void;
+  setActiveWorkspacePath: (path: string) => void;
+  addWorkspace: (provider: AgentModel) => void;
+  removeWorkspace: (workspaceId: string) => void;
   addAgent: (role?: AgentRole) => void;
   removeAgent: (agentId: string) => void;
   updateAgent: (agentId: string, patch: Partial<Agent>) => void;
@@ -95,7 +101,7 @@ const defaultWorkspace: Workspace = {
   synced: false,
 };
 
-const initialAgents = [createAgent("CODER", 1), createAgent("THINKER", 1), createAgent("REVIEWER", 1)];
+const initialAgents: Agent[] = [];
 
 async function readPersistedState() {
   const fallback = localStorage.getItem("agentrix-state");
@@ -133,9 +139,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   booted: false,
   authenticated: false,
   activeWorkspaceId: defaultWorkspace.id,
-  activeAgentId: initialAgents[0].id,
+  activeAgentId: fallbackAgentId,
   settingsOpen: false,
-  workspaces: [defaultWorkspace],
+  workspaces: [],
   agents: initialAgents,
   connections: [
     { provider: "claude-code", connected: false },
@@ -149,7 +155,88 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   setSettingsOpen: (settingsOpen) => set({ settingsOpen }),
   setActiveAgent: (activeAgentId) => {
-    set({ activeAgentId });
+    const agent = get().agents.find((item) => item.id === activeAgentId);
+    set({
+      activeAgentId,
+      activeWorkspaceId: agent?.workspace_id ?? get().activeWorkspaceId,
+    });
+    void get().save();
+  },
+  setActiveWorkspace: (workspaceId) => {
+    const agent = get().agents.find((item) => item.workspace_id === workspaceId);
+    set({
+      activeWorkspaceId: workspaceId,
+      activeAgentId: agent?.id ?? fallbackAgentId,
+    });
+    void get().save();
+  },
+  setActiveWorkspacePath: (path) => {
+    set((state) => ({
+      workspaces: state.workspaces.map((workspace) =>
+        workspace.id === state.activeWorkspaceId
+          ? {
+              ...workspace,
+              path,
+              updatedAt: now(),
+              synced: false,
+            }
+          : workspace,
+      ),
+    }));
+    void get().save();
+  },
+  addWorkspace: (provider) => {
+    const state = get();
+    const projectPath = state.settings.defaultProjectsPath.trim();
+    if (!projectPath) {
+      state.addLog(state.activeAgentId, "warn", "Selecione a pasta do projeto antes de criar workspaces.");
+      return;
+    }
+
+    if (state.agents.length >= state.settings.maxAgents) {
+      state.addLog(state.activeAgentId, "warn", "Limite maximo de workspaces simultaneos atingido.");
+      return;
+    }
+
+    const workspaceIndex = state.workspaces.filter((item) => item.path).length + 1;
+    const projectName = workspaceNameFromPath(projectPath);
+    const providerName = provider === "claude-code" ? "Claude" : "Codex";
+    const workspace: Workspace = {
+      id: id(),
+      name: `${projectName} ${providerName} ${workspaceIndex}`,
+      path: projectPath,
+      updatedAt: now(),
+      synced: false,
+    };
+    const agent = {
+      ...createAgent("CODER", state.agents.length + 1, workspace.id, workspace.name),
+      model: provider,
+      pending_command: provider === "claude-code" ? "claude" : "codex",
+    };
+
+    set((state) => ({
+      workspaces: [...state.workspaces.filter((item) => item.path), workspace],
+      agents: [...state.agents, agent],
+      activeWorkspaceId: workspace.id,
+      activeAgentId: agent.id,
+    }));
+    void get().save();
+  },
+  removeWorkspace: (workspaceId) => {
+    const state = get();
+    const removedAgentIds = new Set(state.agents.filter((agent) => agent.workspace_id === workspaceId).map((agent) => agent.id));
+    const workspaces = state.workspaces.filter((workspace) => workspace.id !== workspaceId);
+    const agents = state.agents.filter((agent) => !removedAgentIds.has(agent.id));
+    const nextWorkspaceId = state.activeWorkspaceId === workspaceId ? workspaces[0]?.id ?? defaultWorkspace.id : state.activeWorkspaceId;
+    const nextActiveAgent = agents.find((agent) => agent.workspace_id === nextWorkspaceId) ?? agents[0];
+
+    set({
+      workspaces,
+      agents,
+      activeWorkspaceId: nextWorkspaceId,
+      activeAgentId: nextActiveAgent?.id ?? fallbackAgentId,
+      logs: state.logs.filter((log) => !removedAgentIds.has(log.agentId)),
+    });
     void get().save();
   },
   addAgent: (role = "CODER") => {
@@ -158,7 +245,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       state.addLog(state.activeAgentId, "warn", "Limite maximo de agentes simultaneos atingido.");
       return;
     }
-    const agent = createAgent(role, state.agents.filter((item) => item.role === role).length + 1);
+    const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    const agent = createAgent(
+      role,
+      state.agents.filter((item) => item.role === role).length + 1,
+      activeWorkspace?.id ?? null,
+      activeWorkspace?.path ? activeWorkspace.name : undefined,
+    );
     set((current) => ({
       agents: [...current.agents, agent],
       activeAgentId: agent.id,
@@ -250,10 +343,10 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({
       authenticated: false,
       activeWorkspaceId: defaultWorkspace.id,
-      activeAgentId: initialAgents[0].id,
+      activeAgentId: fallbackAgentId,
       settingsOpen: false,
-      workspaces: [defaultWorkspace],
-      agents: initialAgents.map((agent) => ({ ...agent, session_id: null, status: "idle" })),
+      workspaces: [],
+      agents: [],
       connections: [
         { provider: "claude-code", connected: false },
         { provider: "codex", connected: false },
@@ -268,14 +361,27 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (persisted) {
       const agents = (persisted.agents ?? initialAgents).map((agent: Agent) => ({
         ...agent,
+        workspace_id: agent.workspace_id ?? persisted.activeWorkspaceId ?? null,
         session_id: null,
         status: "idle" as const,
       }));
+      const workspaces = ((persisted.workspaces ?? []) as Workspace[]).filter((workspace) => workspace.path);
+      const activeWorkspaceId = workspaces.some((workspace: Workspace) => workspace.id === persisted.activeWorkspaceId)
+        ? persisted.activeWorkspaceId
+        : workspaces[0]?.id ?? defaultWorkspace.id;
+      const activeAgentId = agents.some((agent: Agent) => agent.id === persisted.activeAgentId)
+        ? persisted.activeAgentId
+        : agents.find((agent: Agent) => agent.workspace_id === activeWorkspaceId)?.id ?? agents[0]?.id ?? fallbackAgentId;
       set({
         ...persisted,
+        workspaces,
         agents,
-        activeAgentId: agents.some((agent: Agent) => agent.id === persisted.activeAgentId) ? persisted.activeAgentId : agents[0]?.id,
-        settings: { ...defaultSettings, ...persisted.settings },
+        activeWorkspaceId,
+        activeAgentId,
+        settings: {
+          ...defaultSettings,
+          ...persisted.settings,
+        },
         booted: true,
       });
       return;
@@ -296,3 +402,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 }));
+
+function workspaceNameFromPath(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).at(-1) ?? "Workspace";
+}

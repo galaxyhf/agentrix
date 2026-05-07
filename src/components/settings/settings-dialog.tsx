@@ -110,13 +110,19 @@ export function SettingsDialog() {
                 <TabsContent value="Aparencia" className="m-0 space-y-4">
                   <SettingGrid>
                     <NumberField label="Tamanho da fonte" value={settings.fontSize} min={10} max={22} onChange={(fontSize) => updateSettings({ fontSize })} />
+                    <NumberField label="Linhas do terminal" value={settings.terminalRows} min={12} max={80} onChange={(terminalRows) => updateSettings({ terminalRows })} />
+                    <NumberField label="Colunas do terminal" value={settings.terminalCols} min={60} max={220} onChange={(terminalCols) => updateSettings({ terminalCols })} />
+                    <NumberField label="Scrollback" value={settings.scrollback} min={500} max={50000} onChange={(scrollback) => updateSettings({ scrollback })} />
                     <SelectField label="Densidade" value={settings.density} options={["compact", "comfortable", "spacious"]} onChange={(density) => updateSettings({ density: density as typeof settings.density })} />
                     <SelectField label="Accent roxo" value={settings.accent} options={["violet", "purple", "fuchsia"]} onChange={(accent) => updateSettings({ accent: accent as typeof settings.accent })} />
+                    <SelectField label="Performance PTY" value={settings.ptyPerformance} options={["balanced", "latency", "throughput"]} onChange={(ptyPerformance) => updateSettings({ ptyPerformance: ptyPerformance as typeof settings.ptyPerformance })} />
                     <NumberField label="Zoom da interface" value={settings.zoom} min={75} max={150} onChange={(zoom) => updateSettings({ zoom })} />
+                    <TextField label="Shell padrao" value={settings.defaultShell} placeholder="auto" onChange={(defaultShell) => updateSettings({ defaultShell })} />
                     <ToggleField label="Transparencia" checked={settings.transparency} onChange={(transparency) => updateSettings({ transparency })} />
                     <ToggleField label="Animacoes" checked={settings.animations} onChange={(animations) => updateSettings({ animations })} />
                     <ToggleField label="Cursor piscando" checked={settings.cursorBlink} onChange={(cursorBlink) => updateSettings({ cursorBlink })} />
                     <ToggleField label="Copiar ao selecionar" checked={settings.copyOnSelect} onChange={(copyOnSelect) => updateSettings({ copyOnSelect })} />
+                    <ToggleField label="Colar com botao direito" checked={settings.pasteOnRightClick} onChange={(pasteOnRightClick) => updateSettings({ pasteOnRightClick })} />
                   </SettingGrid>
                 </TabsContent>
               </div>
@@ -168,6 +174,14 @@ function NumberField({ label, value, min, max, onChange }: { label: string; valu
   return (
     <FieldShell label={label}>
       <Input type="number" min={min} max={max} value={value} onChange={(event) => onChange(Number(event.target.value))} />
+    </FieldShell>
+  );
+}
+
+function TextField({ label, value, placeholder, onChange }: { label: string; value: string; placeholder?: string; onChange: (value: string) => void }) {
+  return (
+    <FieldShell label={label}>
+      <Input value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
     </FieldShell>
   );
 }

@@ -3,12 +3,10 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ROLE_LABELS, ROLE_PROMPTS } from "@/lib/constants";
 import { listenTauri, resizeAgentSession, startTerminalSession, stopAgentSession, writeAgentSession } from "@/lib/tauri";
 import { useAppStore } from "@/store/app-store";
-import type { Agent, AgentRole } from "@/lib/types";
+import type { Agent } from "@/lib/types";
 
 interface OutputPayload {
   agentId: string;
@@ -20,8 +18,6 @@ interface TerminalPaneProps {
   agent: Agent;
 }
 
-const roles: AgentRole[] = ["CODER", "THINKER", "REVIEWER", "RESEARCHER", "CUSTOM"];
-
 export function TerminalPane({ agent }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -30,19 +26,23 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   const terminalSizeRef = useRef<{ rows: number; cols: number } | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
   const startedRef = useRef(false);
+  const pendingCommandRef = useRef<string | null | undefined>(agent.pending_command);
   const settings = useAppStore((state) => state.settings);
   const workspaces = useAppStore((state) => state.workspaces);
-  const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const attachSession = useAppStore((state) => state.attachSession);
   const updateAgent = useAppStore((state) => state.updateAgent);
   const addLog = useAppStore((state) => state.addLog);
   const removeAgent = useAppStore((state) => state.removeAgent);
-  const agents = useAppStore((state) => state.agents);
-  const workspace = workspaces.find((item) => item.id === activeWorkspaceId);
+  const removeWorkspace = useAppStore((state) => state.removeWorkspace);
+  const workspace = workspaces.find((item) => item.id === agent.workspace_id);
 
   useEffect(() => {
     sessionIdRef.current = agent.session_id;
   }, [agent.session_id]);
+
+  useEffect(() => {
+    pendingCommandRef.current = agent.pending_command;
+  }, [agent.pending_command]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -213,26 +213,29 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
     };
   }, [agent.id]);
 
+  useEffect(() => {
+    const sessionId = agent.session_id;
+    const pendingCommand = pendingCommandRef.current;
+    if (!sessionId || !pendingCommand || sessionId.startsWith("preview-")) {
+      return;
+    }
+
+    pendingCommandRef.current = null;
+    window.setTimeout(() => {
+      void writeAgentSession(sessionId, `${pendingCommand}\r`);
+      updateAgent(agent.id, { pending_command: null });
+    }, 500);
+  }, [agent.id, agent.session_id, updateAgent]);
+
   async function deleteTerminal() {
     if (agent.session_id && !agent.session_id.startsWith("preview-")) {
       await stopAgentSession(agent.session_id);
     }
-    removeAgent(agent.id);
-  }
-
-  async function changeRole(role: AgentRole) {
-    const systemPrompt = role === "CUSTOM" ? agent.system_prompt : ROLE_PROMPTS[role];
-    updateAgent(agent.id, {
-      role,
-      system_prompt: systemPrompt,
-    });
-
-    if (agent.session_id && !agent.session_id.startsWith("preview-")) {
-      await writeAgentSession(
-        agent.session_id,
-        `export AGENTRIX_AGENT_ROLE=${shellQuote(role)}\rexport AGENTRIX_SYSTEM_PROMPT=${shellQuote(systemPrompt)}\r`,
-      );
+    if (agent.workspace_id) {
+      removeWorkspace(agent.workspace_id);
+      return;
     }
+    removeAgent(agent.id);
   }
 
   async function pasteFromClipboard() {
@@ -252,20 +255,8 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   return (
     <div className="flex h-full min-h-0 flex-col bg-terminal-bg">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 text-xs font-medium text-text">
-        <span className="truncate">{agent.name}</span>
+        <span className="truncate">{workspace?.name ?? agent.name}</span>
         <div className="flex items-center gap-2">
-          <Select value={agent.role} onValueChange={(value) => void changeRole(value as AgentRole)}>
-            <SelectTrigger className="h-6 w-28 border-border bg-background px-2 text-xs" aria-label={`Funcao de ${agent.name}`}>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {roles.map((role) => (
-                <SelectItem value={role} key={role}>
-                  {ROLE_LABELS[role]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
@@ -292,8 +283,4 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       />
     </div>
   );
-}
-
-function shellQuote(value: string) {
-  return `'${value.replace(/'/g, "'\\''")}'`;
 }
