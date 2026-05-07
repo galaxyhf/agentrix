@@ -27,6 +27,7 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<string | null>(agent.session_id);
+  const terminalSizeRef = useRef<{ rows: number; cols: number } | null>(null);
   const startedRef = useRef(false);
   const settings = useAppStore((state) => state.settings);
   const workspaces = useAppStore((state) => state.workspaces);
@@ -77,6 +78,7 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
     terminalRef.current = terminal;
     fitRef.current = fit;
     fit.fit();
+    terminalSizeRef.current = { rows: terminal.rows, cols: terminal.cols };
 
     const dataDisposable = terminal.onData((data) => {
       const sessionId = sessionIdRef.current;
@@ -96,22 +98,45 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       void navigator.clipboard?.writeText(terminal.getSelection());
     });
 
-    const observer = new ResizeObserver(() => {
+    let resizeFrame: number | null = null;
+    const fitAndResizeSession = () => {
       fit.fit();
+      const size = { rows: terminal.rows, cols: terminal.cols };
+      const previousSize = terminalSizeRef.current;
+
+      if (previousSize?.rows === size.rows && previousSize.cols === size.cols) {
+        return;
+      }
+
+      terminalSizeRef.current = size;
       const sessionId = sessionIdRef.current;
       if (sessionId && !sessionId.startsWith("preview-")) {
-        void resizeAgentSession(sessionId, terminal.rows, terminal.cols);
+        void resizeAgentSession(sessionId, size.rows, size.cols);
       }
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+      }
+      resizeFrame = requestAnimationFrame(() => {
+        resizeFrame = null;
+        fitAndResizeSession();
+      });
     });
     observer.observe(containerRef.current);
 
     return () => {
+      if (resizeFrame !== null) {
+        cancelAnimationFrame(resizeFrame);
+      }
       dataDisposable.dispose();
       selectionDisposable.dispose();
       observer.disconnect();
       terminal.dispose();
       terminalRef.current = null;
       fitRef.current = null;
+      terminalSizeRef.current = null;
     };
   }, [agent.id, agent.name, settings.copyOnSelect, settings.cursorBlink, settings.fontSize, settings.scrollback]);
 
@@ -122,6 +147,7 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
 
     startedRef.current = true;
     updateAgent(agent.id, { status: "waiting" });
+    const terminalSize = terminalSizeRef.current;
     void startTerminalSession({
       agentId: agent.id,
       model: agent.model,
@@ -131,8 +157,8 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       systemPrompt: agent.system_prompt,
       cwd: workspace?.path || settings.defaultProjectsPath || undefined,
       shell: settings.defaultShell || undefined,
-      rows: settings.terminalRows,
-      cols: settings.terminalCols,
+      rows: terminalSize?.rows ?? settings.terminalRows,
+      cols: terminalSize?.cols ?? settings.terminalCols,
     })
       .then((started) => attachSession(agent.id, started.sessionId))
       .catch((error) => {
@@ -156,15 +182,23 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   ]);
 
   useEffect(() => {
+    let disposed = false;
     let cleanup: (() => void) | undefined;
     void listenTauri<OutputPayload>("agent-session-output", (payload) => {
       if (payload.agentId === agent.id && (!sessionIdRef.current || payload.sessionId === sessionIdRef.current)) {
         terminalRef.current?.write(payload.data);
       }
     }).then((dispose) => {
+      if (disposed) {
+        dispose();
+        return;
+      }
       cleanup = dispose;
     });
-    return () => cleanup?.();
+    return () => {
+      disposed = true;
+      cleanup?.();
+    };
   }, [agent.id]);
 
   async function deleteTerminal() {
@@ -186,6 +220,20 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
         agent.session_id,
         `export AGENTRIX_AGENT_ROLE=${shellQuote(role)}\rexport AGENTRIX_SYSTEM_PROMPT=${shellQuote(systemPrompt)}\r`,
       );
+    }
+  }
+
+  async function pasteFromClipboard() {
+    if (!settings.pasteOnRightClick) {
+      return;
+    }
+    const sessionId = sessionIdRef.current;
+    if (!sessionId) {
+      return;
+    }
+    const text = await navigator.clipboard?.readText();
+    if (text) {
+      await writeAgentSession(sessionId, text);
     }
   }
 
@@ -223,7 +271,14 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
           </Tooltip>
         </div>
       </div>
-      <div ref={containerRef} className="terminal-shell min-h-0 flex-1 overflow-hidden" />
+      <div
+        ref={containerRef}
+        className="terminal-shell min-h-0 flex-1 overflow-hidden"
+        onContextMenu={(event) => {
+          event.preventDefault();
+          void pasteFromClipboard();
+        }}
+      />
     </div>
   );
 }

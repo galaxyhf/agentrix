@@ -79,6 +79,8 @@ interface AppState {
   addLog: (agentId: string, level: SessionLog["level"], message: string) => void;
   updateSettings: (patch: Partial<AgentrixSettings>) => void;
   updateConnection: (provider: AgentModel, patch: Partial<ProviderConnection>) => void;
+  clearCache: () => void;
+  resetApp: () => void;
   load: () => Promise<void>;
   save: () => Promise<void>;
 }
@@ -234,6 +236,34 @@ export const useAppStore = create<AppState>((set, get) => ({
     set((state) => ({
       connections: state.connections.map((connection) => (connection.provider === provider ? { ...connection, ...patch } : connection)),
     }));
+    void get().save();
+  },
+  clearCache: () => {
+    set((state) => ({
+      logs: [],
+      agents: state.agents.map((agent) => ({
+        ...agent,
+        tokens: { ...emptyUsage },
+      })),
+    }));
+    void get().save();
+  },
+  resetApp: () => {
+    localStorage.removeItem("agentrix-state");
+    set({
+      authenticated: false,
+      activeWorkspaceId: defaultWorkspace.id,
+      activeAgentId: initialAgents[0].id,
+      settingsOpen: false,
+      workspaces: [defaultWorkspace],
+      agents: initialAgents.map((agent) => ({ ...agent, session_id: null, status: "idle" })),
+      connections: [
+        { provider: "claude-code", connected: false },
+        { provider: "codex", connected: false },
+      ],
+      logs: [],
+      settings: defaultSettings,
+    });
     void get().save();
   },
   load: async () => {

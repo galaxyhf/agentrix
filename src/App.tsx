@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { CSSProperties } from "react";
 import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MainWorkspace } from "@/components/layout/main-workspace";
@@ -29,6 +30,7 @@ export default function App() {
   const detachSession = useAppStore((state) => state.detachSession);
   const updateTokenUsage = useAppStore((state) => state.updateTokenUsage);
   const addLog = useAppStore((state) => state.addLog);
+  const settings = useAppStore((state) => state.settings);
 
   useEffect(() => {
     void load();
@@ -82,11 +84,33 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={250}>
-      <div className="flex h-full overflow-hidden bg-background text-text">
+      <div
+        className="flex h-full overflow-hidden bg-background text-text"
+        data-density={settings.density}
+        data-animations={settings.animations}
+        data-transparency={settings.transparency}
+        style={appStyle(settings.accent, settings.zoom)}
+      >
         <Sidebar />
         <MainWorkspace />
         <SettingsDialog />
       </div>
     </TooltipProvider>
   );
+}
+
+function appStyle(accent: "violet" | "purple" | "fuchsia", zoom: number): CSSProperties {
+  const accents = {
+    violet: { accent: "#7c3aed", hover: "#a855f7", ring: "168 85 247" },
+    purple: { accent: "#9333ea", hover: "#c084fc", ring: "192 132 252" },
+    fuchsia: { accent: "#c026d3", hover: "#e879f9", ring: "232 121 249" },
+  };
+  const selected = accents[accent];
+
+  return {
+    "--color-accent": selected.accent,
+    "--color-accent-hover": selected.hover,
+    "--ring": selected.ring,
+    zoom: `${Math.min(150, Math.max(75, zoom))}%`,
+  } as CSSProperties;
 }
