@@ -2,16 +2,29 @@ import { Database, Plus, Settings, TerminalSquare, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { ROLE_LABELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { stopAgentSession } from "@/lib/tauri";
 import { useAppStore } from "@/store/app-store";
 import type { AgentStatus } from "@/lib/types";
 
-const statusVariant: Record<AgentStatus, "secondary" | "success" | "error" | "default"> = {
+const statusVariant: Record<
+  AgentStatus,
+  "secondary" | "success" | "error" | "default"
+> = {
   idle: "secondary",
   running: "success",
   waiting: "default",
@@ -29,8 +42,14 @@ export function Sidebar() {
   const removeAgent = useAppStore((state) => state.removeAgent);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
 
-  const totalTokens = agents.reduce((sum, agent) => sum + agent.tokens.total_tokens, 0);
-  const totalCost = agents.reduce((sum, agent) => sum + agent.tokens.estimated_cost, 0);
+  const totalTokens = agents.reduce(
+    (sum, agent) => sum + agent.tokens.total_tokens,
+    0,
+  );
+  const totalCost = agents.reduce(
+    (sum, agent) => sum + agent.tokens.estimated_cost,
+    0,
+  );
 
   async function deleteAgent(agentId: string) {
     const agent = agents.find((item) => item.id === agentId);
@@ -47,7 +66,7 @@ export function Sidebar() {
           <TerminalSquare className="size-5 text-accent" />
           <div>
             <h1 className="text-lg font-semibold leading-none">AGENTRIX</h1>
-            <p className="mt-1 text-xs text-text-muted">v0.1.0 alpha</p>
+            <p className="mt-1 text-xs text-text-muted">v0.1.0</p>
           </div>
         </div>
       </div>
@@ -67,7 +86,9 @@ export function Sidebar() {
         </Select>
         <div className="flex items-center justify-between text-xs text-text-muted">
           <span>Offline sync</span>
-          <Badge variant={workspaces[0]?.synced ? "success" : "secondary"}>{workspaces[0]?.synced ? "synced" : "local"}</Badge>
+          <Badge variant={workspaces[0]?.synced ? "success" : "secondary"}>
+            {workspaces[0]?.synced ? "synced" : "local"}
+          </Badge>
         </div>
       </div>
 
@@ -77,7 +98,12 @@ export function Sidebar() {
             <p className="text-xs uppercase text-text-muted">Agentes</p>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button size="icon" variant="ghost" onClick={() => addAgent("CODER")} aria-label="Novo agente">
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => addAgent("CODER")}
+                  aria-label="Novo agente"
+                >
                   <Plus />
                 </Button>
               </TooltipTrigger>
@@ -93,10 +119,17 @@ export function Sidebar() {
                 activeAgentId === agent.id && "border-accent bg-card",
               )}
             >
-              <button className="w-full text-left" onClick={() => setActiveAgent(agent.id)}>
+              <button
+                className="w-full text-left"
+                onClick={() => setActiveAgent(agent.id)}
+              >
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm font-medium">{agent.name}</span>
-                  <Badge variant={statusVariant[agent.status]}>{agent.status}</Badge>
+                  <span className="truncate text-sm font-medium">
+                    {agent.name}
+                  </span>
+                  <Badge variant={statusVariant[agent.status]}>
+                    {agent.status}
+                  </Badge>
                 </div>
                 <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
                   <span>{ROLE_LABELS[agent.role]}</span>
@@ -111,7 +144,6 @@ export function Sidebar() {
                       variant="ghost"
                       className="size-7"
                       onClick={() => void deleteAgent(agent.id)}
-                      disabled={agents.length <= 1}
                       aria-label={`Excluir ${agent.name}`}
                     >
                       <Trash2 />
@@ -140,7 +172,10 @@ export function Sidebar() {
         <div className="mt-3 flex items-center justify-between text-xs text-text-muted">
           <div className="flex items-center gap-2">
             <Database className="size-3.5" />
-            <span>{connections.filter((connection) => connection.connected).length}/2 CLIs</span>
+            <span>
+              {connections.filter((connection) => connection.connected).length}
+              /2 CLIs
+            </span>
           </div>
           <Badge variant="secondary">local</Badge>
         </div>
@@ -150,7 +185,12 @@ export function Sidebar() {
         <div className="flex justify-end">
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" onClick={() => setSettingsOpen(true)} aria-label="Settings">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Settings"
+              >
                 <Settings />
               </Button>
             </TooltipTrigger>

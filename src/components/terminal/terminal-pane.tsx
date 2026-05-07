@@ -28,6 +28,7 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   const fitRef = useRef<FitAddon | null>(null);
   const sessionIdRef = useRef<string | null>(agent.session_id);
   const terminalSizeRef = useRef<{ rows: number; cols: number } | null>(null);
+  const resizeTimerRef = useRef<number | null>(null);
   const startedRef = useRef(false);
   const settings = useAppStore((state) => state.settings);
   const workspaces = useAppStore((state) => state.workspaces);
@@ -98,7 +99,6 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       void navigator.clipboard?.writeText(terminal.getSelection());
     });
 
-    let resizeFrame: number | null = null;
     const fitAndResizeSession = () => {
       fit.fit();
       const size = { rows: terminal.rows, cols: terminal.cols };
@@ -111,24 +111,27 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       terminalSizeRef.current = size;
       const sessionId = sessionIdRef.current;
       if (sessionId && !sessionId.startsWith("preview-")) {
-        void resizeAgentSession(sessionId, size.rows, size.cols);
+        if (resizeTimerRef.current !== null) {
+          window.clearTimeout(resizeTimerRef.current);
+        }
+        resizeTimerRef.current = window.setTimeout(() => {
+          const currentSessionId = sessionIdRef.current;
+          if (currentSessionId && !currentSessionId.startsWith("preview-")) {
+            void resizeAgentSession(currentSessionId, size.rows, size.cols);
+          }
+        }, 120);
       }
     };
 
     const observer = new ResizeObserver(() => {
-      if (resizeFrame !== null) {
-        cancelAnimationFrame(resizeFrame);
-      }
-      resizeFrame = requestAnimationFrame(() => {
-        resizeFrame = null;
-        fitAndResizeSession();
-      });
+      fitAndResizeSession();
     });
     observer.observe(containerRef.current);
 
     return () => {
-      if (resizeFrame !== null) {
-        cancelAnimationFrame(resizeFrame);
+      if (resizeTimerRef.current !== null) {
+        window.clearTimeout(resizeTimerRef.current);
+        resizeTimerRef.current = null;
       }
       dataDisposable.dispose();
       selectionDisposable.dispose();
@@ -160,7 +163,10 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
       rows: terminalSize?.rows ?? settings.terminalRows,
       cols: terminalSize?.cols ?? settings.terminalCols,
     })
-      .then((started) => attachSession(agent.id, started.sessionId))
+      .then((started) => {
+        sessionIdRef.current = started.sessionId;
+        attachSession(agent.id, started.sessionId);
+      })
       .catch((error) => {
         updateAgent(agent.id, { status: "error" });
         addLog(agent.id, "error", error instanceof Error ? error.message : String(error));
@@ -185,7 +191,13 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
     let disposed = false;
     let cleanup: (() => void) | undefined;
     void listenTauri<OutputPayload>("agent-session-output", (payload) => {
-      if (payload.agentId === agent.id && (!sessionIdRef.current || payload.sessionId === sessionIdRef.current)) {
+      if (payload.agentId !== agent.id) {
+        return;
+      }
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = payload.sessionId;
+      }
+      if (payload.sessionId === sessionIdRef.current) {
         terminalRef.current?.write(payload.data);
       }
     }).then((dispose) => {
@@ -259,11 +271,10 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
               <Button
                 variant="ghost"
                 size="icon"
-                className="size-6"
-                onClick={() => void deleteTerminal()}
-                disabled={agents.length <= 1}
-                aria-label={`Apagar ${agent.name}`}
-              >
+              className="size-6"
+              onClick={() => void deleteTerminal()}
+              aria-label={`Apagar ${agent.name}`}
+            >
                 <Trash2 className="size-3.5" />
               </Button>
             </TooltipTrigger>

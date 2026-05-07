@@ -56,6 +56,8 @@ const createAgent = (role: AgentRole, index: number): Agent => ({
   tokens: { ...emptyUsage },
 });
 
+const fallbackAgentId = "no-terminal-selected";
+
 interface AppState {
   booted: boolean;
   authenticated: boolean;
@@ -165,13 +167,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   removeAgent: (agentId) => {
     const state = get();
-    if (state.agents.length <= 1) {
-      state.addLog(agentId, "warn", "Mantenha pelo menos um terminal aberto.");
-      return;
-    }
-
     const remaining = state.agents.filter((agent) => agent.id !== agentId);
-    const nextActive = state.activeAgentId === agentId ? remaining[0].id : state.activeAgentId;
+    const nextActive = state.activeAgentId === agentId ? remaining[0]?.id ?? fallbackAgentId : state.activeAgentId;
     set({
       agents: remaining,
       activeAgentId: nextActive,
