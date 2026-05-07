@@ -78,6 +78,7 @@ interface AppState {
   setActiveWorkspacePath: (path: string) => void;
   addWorkspace: (provider: AgentModel) => void;
   removeWorkspace: (workspaceId: string) => void;
+  removeAllWorkspaces: () => void;
   addAgent: (role?: AgentRole) => void;
   removeAgent: (agentId: string) => void;
   updateAgent: (agentId: string, patch: Partial<Agent>) => void;
@@ -200,10 +201,9 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const workspaceIndex = state.workspaces.filter((item) => item.path).length + 1;
     const projectName = workspaceNameFromPath(projectPath);
-    const providerName = provider === "claude-code" ? "Claude" : "Codex";
     const workspace: Workspace = {
       id: id(),
-      name: `${projectName} ${providerName} ${workspaceIndex}`,
+      name: workspaceIndex === 1 ? projectName : `${projectName} ${workspaceIndex}`,
       path: projectPath,
       updatedAt: now(),
       synced: false,
@@ -236,6 +236,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       activeWorkspaceId: nextWorkspaceId,
       activeAgentId: nextActiveAgent?.id ?? fallbackAgentId,
       logs: state.logs.filter((log) => !removedAgentIds.has(log.agentId)),
+    });
+    void get().save();
+  },
+  removeAllWorkspaces: () => {
+    set({
+      workspaces: [],
+      agents: [],
+      activeWorkspaceId: defaultWorkspace.id,
+      activeAgentId: fallbackAgentId,
+      logs: [],
     });
     void get().save();
   },

@@ -16,9 +16,10 @@ interface OutputPayload {
 
 interface TerminalPaneProps {
   agent: Agent;
+  visible: boolean;
 }
 
-export function TerminalPane({ agent }: TerminalPaneProps) {
+export function TerminalPane({ agent, visible }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -32,7 +33,6 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   const attachSession = useAppStore((state) => state.attachSession);
   const updateAgent = useAppStore((state) => state.updateAgent);
   const addLog = useAppStore((state) => state.addLog);
-  const removeAgent = useAppStore((state) => state.removeAgent);
   const removeWorkspace = useAppStore((state) => state.removeWorkspace);
   const workspace = workspaces.find((item) => item.id === agent.workspace_id);
 
@@ -43,6 +43,29 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
   useEffect(() => {
     pendingCommandRef.current = agent.pending_command;
   }, [agent.pending_command]);
+
+  useEffect(() => {
+    if (!visible) {
+      terminalRef.current?.blur();
+      return;
+    }
+
+    window.requestAnimationFrame(() => {
+      fitRef.current?.fit();
+      const terminal = terminalRef.current;
+      if (!terminal) {
+        return;
+      }
+
+      const size = { rows: terminal.rows, cols: terminal.cols };
+      terminalSizeRef.current = size;
+      const sessionId = sessionIdRef.current;
+      if (sessionId && !sessionId.startsWith("preview-")) {
+        void resizeAgentSession(sessionId, size.rows, size.cols);
+      }
+      terminal.focus();
+    });
+  }, [visible]);
 
   useEffect(() => {
     if (!containerRef.current) {
@@ -233,9 +256,7 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
     }
     if (agent.workspace_id) {
       removeWorkspace(agent.workspace_id);
-      return;
     }
-    removeAgent(agent.id);
   }
 
   async function pasteFromClipboard() {
@@ -256,22 +277,14 @@ export function TerminalPane({ agent }: TerminalPaneProps) {
     <div className="flex h-full min-h-0 flex-col bg-terminal-bg">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 text-xs font-medium text-text">
         <span className="truncate">{workspace?.name ?? agent.name}</span>
-        <div className="flex items-center gap-2">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-              className="size-6"
-              onClick={() => void deleteTerminal()}
-              aria-label={`Apagar ${agent.name}`}
-            >
-                <Trash2 className="size-3.5" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>Apagar terminal</TooltipContent>
-          </Tooltip>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button variant="ghost" size="icon" className="size-6" onClick={() => void deleteTerminal()} aria-label={`Apagar ${agent.name}`}>
+              <Trash2 className="size-3.5" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Apagar terminal</TooltipContent>
+        </Tooltip>
       </div>
       <div
         ref={containerRef}

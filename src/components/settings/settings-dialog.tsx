@@ -110,8 +110,8 @@ export function SettingsDialog() {
                 <TabsContent value="Aparencia" className="m-0 space-y-4">
                   <SettingGrid>
                     <NumberField label="Tamanho da fonte" value={settings.fontSize} min={10} max={22} onChange={(fontSize) => updateSettings({ fontSize })} />
-                    <NumberField label="Linhas do terminal" value={settings.terminalRows} min={12} max={80} onChange={(terminalRows) => updateSettings({ terminalRows })} />
-                    <NumberField label="Colunas do terminal" value={settings.terminalCols} min={60} max={220} onChange={(terminalCols) => updateSettings({ terminalCols })} />
+                    <NumberField label="Linhas do PTY" value={settings.terminalRows} min={12} max={80} onChange={(terminalRows) => updateSettings({ terminalRows })} />
+                    <NumberField label="Colunas do PTY" value={settings.terminalCols} min={60} max={220} onChange={(terminalCols) => updateSettings({ terminalCols })} />
                     <NumberField label="Scrollback" value={settings.scrollback} min={500} max={50000} onChange={(scrollback) => updateSettings({ scrollback })} />
                     <SelectField label="Densidade" value={settings.density} options={["compact", "comfortable", "spacious"]} onChange={(density) => updateSettings({ density: density as typeof settings.density })} />
                     <SelectField label="Accent roxo" value={settings.accent} options={["violet", "purple", "fuchsia"]} onChange={(accent) => updateSettings({ accent: accent as typeof settings.accent })} />
