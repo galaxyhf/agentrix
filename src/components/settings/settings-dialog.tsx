@@ -1,4 +1,4 @@
-import { CheckCircle2, PlugZap, Terminal, XCircle } from "lucide-react";
+import { CheckCircle2, ExternalLink, PlugZap, Terminal, XCircle } from "lucide-react";
 import type React from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,34 @@ import type { AgentModel } from "@/lib/types";
 
 const settingTabs = ["Conexoes", "Aparencia"];
 
+const cliSetup: Record<
+  AgentModel,
+  {
+    title: string;
+    install: string;
+    login: string;
+    docsUrl: string;
+    setupCommand: string;
+  }
+> = {
+  "claude-code": {
+    title: "Claude Code",
+    install: "curl -fsSL https://claude.ai/install.sh | bash",
+    login: "claude auth login",
+    docsUrl: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
+    setupCommand:
+      "printf '\\nAgentrix: configurando Claude Code...\\n'; if ! command -v claude >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash; export PATH=\"$HOME/.local/bin:$HOME/.claude/local:$PATH\"; fi; claude auth status --text || claude auth login; claude --version",
+  },
+  codex: {
+    title: "Codex",
+    install: "npm install -g @openai/codex",
+    login: "codex login",
+    docsUrl: "https://github.com/openai/codex",
+    setupCommand:
+      "printf '\\nAgentrix: configurando Codex CLI...\\n'; if ! command -v codex >/dev/null 2>&1; then npm install -g @openai/codex; fi; codex login status || codex login; codex --version",
+  },
+};
+
 export function SettingsDialog() {
   const open = useAppStore((state) => state.settingsOpen);
   const setOpen = useAppStore((state) => state.setSettingsOpen);
@@ -23,6 +51,7 @@ export function SettingsDialog() {
   const connections = useAppStore((state) => state.connections);
   const updateConnection = useAppStore((state) => state.updateConnection);
   const addLog = useAppStore((state) => state.addLog);
+  const addWorkspace = useAppStore((state) => state.addWorkspace);
   const activeAgentId = useAppStore((state) => state.activeAgentId);
 
   async function checkProvider(provider: AgentModel) {
@@ -48,6 +77,40 @@ export function SettingsDialog() {
     updateConnection(provider, { connected: false, error: undefined });
   }
 
+  async function openDocs(provider: AgentModel) {
+    const url = cliSetup[provider].docsUrl;
+    if (!window.__TAURI_INTERNALS__) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    const { open } = await import("@tauri-apps/plugin-shell");
+    await open(url);
+  }
+
+  async function runCliSetup(provider: AgentModel) {
+    const setup = cliSetup[provider];
+    if (!useAppStore.getState().settings.defaultProjectsPath) {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: "Selecionar pasta para configurar CLI",
+        });
+        if (typeof selected !== "string") {
+          return;
+        }
+        updateSettings({ defaultProjectsPath: selected });
+      } catch (error) {
+        addLog(activeAgentId, "error", error instanceof Error ? error.message : String(error));
+        return;
+      }
+    }
+    setOpen(false);
+    addWorkspace(provider, setup.setupCommand, `Setup ${setup.title}`);
+    addLog(activeAgentId, "info", `Setup do ${setup.title} iniciado no terminal embutido.`);
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="h-[70vh] max-w-4xl p-0">
@@ -71,14 +134,18 @@ export function SettingsDialog() {
                 <TabsContent value="Conexoes" className="m-0 space-y-4">
                   {connections.map((connection) => (
                     <section key={connection.provider} className="rounded-md border bg-background p-4">
+                      {(() => {
+                        const setup = cliSetup[connection.provider];
+                        return (
+                          <>
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3">
                           <div className="flex size-9 items-center justify-center rounded-md border bg-surface">
                             <Terminal className="size-4 text-accent" />
                           </div>
                           <div>
-                            <h3 className="text-sm font-medium">{connection.provider === "claude-code" ? "Claude Code" : "Codex"}</h3>
-                            <p className="mt-1 text-xs text-text-muted">Use o login do CLI oficial direto em qualquer terminal do Agentrix.</p>
+                            <h3 className="text-sm font-medium">{setup.title}</h3>
+                            <p className="mt-1 text-xs text-text-muted">Instale, verifique e autentique pelo fluxo oficial no terminal embutido.</p>
                           </div>
                         </div>
                         <Badge variant={connection.connected ? "success" : connection.error ? "error" : "secondary"}>
@@ -94,15 +161,31 @@ export function SettingsDialog() {
 
                       {connection.error && <p className="mt-3 rounded-md border border-error bg-card p-3 text-xs text-error">{connection.error}</p>}
 
-                      <div className="mt-4 flex gap-2">
+                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-text-muted">
+                        <InfoBox label="Instalacao oficial" value={setup.install} />
+                        <InfoBox label="Login oficial" value={setup.login} />
+                      </div>
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Button onClick={() => void runCliSetup(connection.provider)}>
+                          <Terminal />
+                          Instalar / login
+                        </Button>
                         <Button onClick={() => checkProvider(connection.provider)}>
                           <PlugZap />
                           Verificar CLI
+                        </Button>
+                        <Button variant="outline" onClick={() => void openDocs(connection.provider)}>
+                          <ExternalLink />
+                          Docs oficiais
                         </Button>
                         <Button variant="outline" onClick={() => disconnect(connection.provider)}>
                           Limpar status
                         </Button>
                       </div>
+                          </>
+                        );
+                      })()}
                     </section>
                   ))}
                 </TabsContent>
@@ -116,6 +199,7 @@ export function SettingsDialog() {
                     <SelectField label="Densidade" value={settings.density} options={["compact", "comfortable", "spacious"]} onChange={(density) => updateSettings({ density: density as typeof settings.density })} />
                     <SelectField label="Accent roxo" value={settings.accent} options={["violet", "purple", "fuchsia"]} onChange={(accent) => updateSettings({ accent: accent as typeof settings.accent })} />
                     <SelectField label="Performance PTY" value={settings.ptyPerformance} options={["balanced", "latency", "throughput"]} onChange={(ptyPerformance) => updateSettings({ ptyPerformance: ptyPerformance as typeof settings.ptyPerformance })} />
+                    <LayoutModeField value={settings.workspaceLayout} onChange={(workspaceLayout) => updateSettings({ workspaceLayout })} />
                     <NumberField label="Zoom da interface" value={settings.zoom} min={75} max={150} onChange={(zoom) => updateSettings({ zoom })} />
                     <TextField label="Shell padrao" value={settings.defaultShell} placeholder="auto" onChange={(defaultShell) => updateSettings({ defaultShell })} />
                     <ToggleField label="Transparencia" checked={settings.transparency} onChange={(transparency) => updateSettings({ transparency })} />
@@ -201,6 +285,31 @@ function SelectField({ label, value, options, onChange }: { label: string; value
           ))}
         </SelectContent>
       </Select>
+    </FieldShell>
+  );
+}
+
+function LayoutModeField({ value, onChange }: { value: "single" | "grid"; onChange: (value: "single" | "grid") => void }) {
+  return (
+    <FieldShell label="Modo dos workspaces">
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant={value === "single" ? "default" : "outline"}
+          onClick={() => onChange("single")}
+          className="justify-center"
+        >
+          1 terminal
+        </Button>
+        <Button
+          type="button"
+          variant={value === "grid" ? "default" : "outline"}
+          onClick={() => onChange("grid")}
+          className="justify-center"
+        >
+          Grid
+        </Button>
+      </div>
     </FieldShell>
   );
 }

@@ -62,6 +62,7 @@ export interface AgentrixSettings {
   copyOnSelect: boolean;
   pasteOnRightClick: boolean;
   ptyPerformance: "balanced" | "latency" | "throughput";
+  workspaceLayout: "single" | "grid";
   autoRestart: boolean;
   maxAgents: number;
   agentTimeout: number;

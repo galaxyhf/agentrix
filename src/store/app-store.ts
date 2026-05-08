@@ -27,6 +27,7 @@ const defaultSettings: AgentrixSettings = {
   copyOnSelect: true,
   pasteOnRightClick: true,
   ptyPerformance: "balanced",
+  workspaceLayout: "single",
   autoRestart: false,
   maxAgents: 6,
   agentTimeout: 45,
@@ -76,7 +77,7 @@ interface AppState {
   setActiveAgent: (agentId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveWorkspacePath: (path: string) => void;
-  addWorkspace: (provider: AgentModel) => void;
+  addWorkspace: (provider: AgentModel, pendingCommand?: string, name?: string) => void;
   removeWorkspace: (workspaceId: string) => void;
   removeAllWorkspaces: () => void;
   addAgent: (role?: AgentRole) => void;
@@ -186,7 +187,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     void get().save();
   },
-  addWorkspace: (provider) => {
+  addWorkspace: (provider, pendingCommand, name) => {
     const state = get();
     const projectPath = state.settings.defaultProjectsPath.trim();
     if (!projectPath) {
@@ -203,7 +204,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const projectName = workspaceNameFromPath(projectPath);
     const workspace: Workspace = {
       id: id(),
-      name: workspaceIndex === 1 ? projectName : `${projectName} ${workspaceIndex}`,
+      name: name ?? (workspaceIndex === 1 ? projectName : `${projectName} ${workspaceIndex}`),
       path: projectPath,
       updatedAt: now(),
       synced: false,
@@ -211,7 +212,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     const agent = {
       ...createAgent("CODER", state.agents.length + 1, workspace.id, workspace.name),
       model: provider,
-      pending_command: provider === "claude-code" ? "claude" : "codex",
+      pending_command: pendingCommand ?? (provider === "claude-code" ? "claude" : "codex"),
     };
 
     set((state) => ({
@@ -287,7 +288,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   attachSession: (agentId, sessionId) => {
     set((state) => ({
-      agents: state.agents.map((agent) => (agent.id === agentId ? { ...agent, session_id: sessionId, status: "running" } : agent)),
+      agents: state.agents.map((agent) => (agent.id === agentId ? { ...agent, session_id: sessionId, status: "waiting" } : agent)),
     }));
     get().addLog(agentId, "info", `Sessao ${sessionId} conectada.`);
     void get().save();

@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 import { Loader2 } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
@@ -22,6 +22,12 @@ interface TokenPayload extends TokenUsage {
   sessionId: string;
 }
 
+interface OutputPayload {
+  agentId: string;
+  sessionId: string;
+  data: string;
+}
+
 export default function App() {
   const booted = useAppStore((state) => state.booted);
   const authenticated = useAppStore((state) => state.authenticated);
@@ -31,6 +37,7 @@ export default function App() {
   const updateTokenUsage = useAppStore((state) => state.updateTokenUsage);
   const addLog = useAppStore((state) => state.addLog);
   const settings = useAppStore((state) => state.settings);
+  const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
     void load();
@@ -39,6 +46,7 @@ export default function App() {
   useEffect(() => {
     let cleanupStatus: (() => void) | undefined;
     let cleanupTokens: (() => void) | undefined;
+    let cleanupOutput: (() => void) | undefined;
 
     void listenTauri<StatusPayload>("agent-session-status", (payload) => {
       if (payload.status === "idle") {
@@ -59,9 +67,40 @@ export default function App() {
       cleanupTokens = cleanup;
     });
 
+    void listenTauri<OutputPayload>("agent-session-output", (payload) => {
+      const currentAgent = useAppStore.getState().agents.find((agent) => agent.id === payload.agentId);
+      if (!currentAgent || currentAgent.session_id !== payload.sessionId || currentAgent.status === "error") {
+        return;
+      }
+
+      if (currentAgent.status !== "running") {
+        updateAgent(payload.agentId, { status: "running" });
+      }
+
+      const previousTimer = activityTimers.current.get(payload.agentId);
+      if (previousTimer) {
+        clearTimeout(previousTimer);
+      }
+
+      const timer = setTimeout(() => {
+        const latestAgent = useAppStore.getState().agents.find((agent) => agent.id === payload.agentId);
+        if (latestAgent?.session_id === payload.sessionId && latestAgent.status === "running") {
+          updateAgent(payload.agentId, { status: "waiting" });
+        }
+        activityTimers.current.delete(payload.agentId);
+      }, 1400);
+
+      activityTimers.current.set(payload.agentId, timer);
+    }).then((cleanup) => {
+      cleanupOutput = cleanup;
+    });
+
     return () => {
+      activityTimers.current.forEach((timer) => clearTimeout(timer));
+      activityTimers.current.clear();
       cleanupStatus?.();
       cleanupTokens?.();
+      cleanupOutput?.();
     };
   }, [addLog, detachSession, updateAgent, updateTokenUsage]);
 

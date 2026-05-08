@@ -1,4 +1,4 @@
-import { Bot, FolderOpen, Plus, Settings, Trash2 } from "lucide-react";
+import { Bot, Code2, FolderOpen, Plus, Settings, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,6 +19,13 @@ const statusVariant: Record<
   idle: "secondary",
   running: "success",
   waiting: "default",
+  error: "error",
+};
+
+const statusLabel: Record<AgentStatus, string> = {
+  idle: "idle",
+  running: "running",
+  waiting: "ready",
   error: "error",
 };
 
@@ -90,7 +97,7 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r bg-surface">
+    <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-surface">
       <div className="border-b p-3">
         <div>
           <h1 className="text-lg font-semibold leading-none">AGENTRIX</h1>
@@ -99,13 +106,16 @@ export function Sidebar() {
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-2 p-3">
+        <div className="space-y-2 px-3 py-3 pr-4">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <p className="min-w-0 truncate text-xs font-medium text-text">
-              {settings.defaultProjectsPath
-                ? folderNameFromPath(settings.defaultProjectsPath)
-                : "Nenhuma pasta selecionada"}
-            </p>
+            <div className="flex min-w-0 items-center gap-2 rounded-md border bg-background/80 px-2 py-1.5 text-xs font-semibold text-text">
+              <span className="size-2 shrink-0 rounded-full bg-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_70%,transparent)]" />
+              <span className="truncate">
+                {settings.defaultProjectsPath
+                  ? folderNameFromPath(settings.defaultProjectsPath)
+                  : "Nenhuma pasta selecionada"}
+              </span>
+            </div>
             <div className="flex shrink-0 items-center gap-1">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -176,6 +186,10 @@ export function Sidebar() {
 
           {workspaces.map((workspace) => {
             const agent = agentForWorkspace(workspace.id);
+            const status = agent?.status ?? "idle";
+            const isActive = activeWorkspaceId === workspace.id;
+            const isClaude = agent?.model === "claude-code";
+            const ProviderIcon = isClaude ? Bot : Code2;
             return (
               <div
                 key={workspace.id}
@@ -189,36 +203,46 @@ export function Sidebar() {
                   }
                 }}
                 className={cn(
-                  "w-full cursor-pointer rounded-md border bg-background p-3 transition-colors hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
-                  activeWorkspaceId === workspace.id && "border-accent bg-card",
+                  "group flex min-h-[108px] w-full cursor-pointer flex-col justify-between overflow-hidden rounded-lg border bg-background/80 p-3 transition-colors hover:border-accent/70 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                  isActive && "border-accent bg-card ring-1 ring-inset ring-accent",
                 )}
               >
                 <div className="w-full text-left">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium">
-                      {workspace.name}
-                    </span>
-                    <Badge variant={statusVariant[agent?.status ?? "idle"]}>
-                      {agent?.status ?? "idle"}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold leading-5 text-text">
+                        {workspace.name}
+                      </span>
+                      <div className="mt-2 flex items-center gap-2 text-xs text-text-muted">
+                        <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-surface text-text">
+                          <ProviderIcon className="size-3.5" />
+                        </span>
+                        <span className="truncate whitespace-nowrap">
+                          {isClaude ? "Claude Code" : "Codex"}
+                        </span>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={statusVariant[status]}
+                      className="h-6 w-[5.75rem] shrink-0 justify-center gap-1.5 px-2"
+                    >
+                      <span
+                        className={cn(
+                          "size-1.5 shrink-0 rounded-full bg-current",
+                          status === "running" && "animate-pulse",
+                        )}
+                      />
+                      <span className="truncate">{statusLabel[status]}</span>
                     </Badge>
                   </div>
-                  <p className="mt-2 truncate text-xs text-text-muted">
-                    {workspace.path}
-                  </p>
-                  <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-                    <span>
-                      {agent?.model === "claude-code" ? "Claude" : "Codex"}
-                    </span>
-                    <span>terminal</span>
-                  </div>
                 </div>
-                <div className="mt-3 flex justify-end">
+                <div className="mt-3 flex h-7 justify-end">
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
                         size="icon"
                         variant="ghost"
-                        className="size-7"
+                        className="size-7 text-text-muted opacity-70 transition-opacity hover:opacity-100 group-hover:opacity-100"
                         onClick={(event) => {
                           event.stopPropagation();
                           void deleteWorkspace(workspace.id);

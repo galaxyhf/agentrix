@@ -1,10 +1,14 @@
 import { TerminalPane } from "@/components/terminal/terminal-pane";
+import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 
 export function MainWorkspace() {
   const agents = useAppStore((state) => state.agents);
   const activeAgentId = useAppStore((state) => state.activeAgentId);
+  const settings = useAppStore((state) => state.settings);
+  const setActiveAgent = useAppStore((state) => state.setActiveAgent);
   const visibleAgentId = agents.some((agent) => agent.id === activeAgentId) ? activeAgentId : agents[0]?.id;
+  const isGridLayout = settings.workspaceLayout === "grid";
 
   if (agents.length === 0) {
     return (
@@ -24,19 +28,44 @@ export function MainWorkspace() {
   }
 
   return (
-    <main className="relative min-w-0 flex-1 overflow-hidden bg-background">
+    <main
+      className={cn(
+        "min-w-0 flex-1 overflow-hidden bg-background",
+        isGridLayout
+          ? "grid gap-2 p-2"
+          : "relative",
+        isGridLayout && agents.length <= 1 && "grid-cols-1",
+        isGridLayout && agents.length === 2 && "grid-cols-2",
+        isGridLayout && agents.length >= 3 && agents.length <= 4 && "grid-cols-2 grid-rows-2",
+        isGridLayout && agents.length >= 5 && "grid-cols-3 grid-rows-2",
+      )}
+    >
       {agents.map((agent) => (
-        <div
+        <section
           key={agent.id}
-          className={
-            agent.id === visibleAgentId
-              ? "visible absolute inset-0 z-10 opacity-100"
-              : "invisible pointer-events-none absolute inset-0 z-0 opacity-0"
-          }
-          aria-hidden={agent.id !== visibleAgentId}
+          className={cn(
+            "min-h-0 min-w-0 overflow-hidden bg-terminal-bg",
+            isGridLayout
+              ? "relative rounded-md border"
+              : agent.id === visibleAgentId
+                ? "visible absolute inset-0 z-10 opacity-100"
+                : "invisible pointer-events-none absolute inset-0 z-0 opacity-0",
+            isGridLayout && agent.id === visibleAgentId && "border-accent ring-1 ring-inset ring-accent",
+          )}
+          aria-hidden={!isGridLayout && agent.id !== visibleAgentId}
+          onFocus={() => {
+            if (isGridLayout) {
+              setActiveAgent(agent.id);
+            }
+          }}
+          onClick={() => {
+            if (isGridLayout) {
+              setActiveAgent(agent.id);
+            }
+          }}
         >
-          <TerminalPane agent={agent} visible={agent.id === visibleAgentId} />
-        </div>
+          <TerminalPane agent={agent} visible={isGridLayout || agent.id === visibleAgentId} />
+        </section>
       ))}
     </main>
   );

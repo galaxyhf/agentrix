@@ -378,7 +378,7 @@ fn spawn_reader(
         SessionStatusPayload {
             agent_id: agent_id.clone(),
             session_id: session_id.clone(),
-            status: "running".to_string(),
+            status: "waiting".to_string(),
             message: None,
         },
     );
