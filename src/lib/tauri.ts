@@ -77,10 +77,43 @@ export async function resizeAgentSession(sessionId: string, rows: number, cols: 
 
 export async function checkCliStatus(provider: AgentModel) {
   if (!isTauri()) {
-    return "Preview mode";
+    return {
+      provider,
+      installed: false,
+      authenticated: false,
+      version: "Preview mode",
+      executable: undefined,
+      installMessage: "Validacao real disponivel apenas no app desktop.",
+      authMessage: "Validacao real disponivel apenas no app desktop.",
+      installHint: "",
+      loginHint: "",
+    } satisfies CliStatus;
   }
   const { invoke } = await import("@tauri-apps/api/core");
-  return invoke<string>("check_cli_status", { provider });
+  return invoke<CliStatus>("check_cli_status", { provider });
+}
+
+export interface CliStatus {
+  provider: AgentModel;
+  installed: boolean;
+  authenticated: boolean;
+  version?: string;
+  executable?: string;
+  installMessage?: string;
+  authMessage?: string;
+  installHint: string;
+  loginHint: string;
+}
+
+export type HostPlatform = "windows" | "macos" | "unix" | "web";
+
+export async function getHostPlatform(): Promise<HostPlatform> {
+  if (!isTauri()) {
+    const platform = navigator.platform.toLowerCase();
+    return platform.includes("win") ? "windows" : platform.includes("mac") ? "macos" : "web";
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<HostPlatform>("host_platform");
 }
 
 export async function listenTauri<T>(event: string, handler: (payload: T) => void) {

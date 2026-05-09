@@ -1,5 +1,6 @@
 import { CheckCircle2, ExternalLink, PlugZap, Terminal, XCircle } from "lucide-react";
 import type React from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { checkCliStatus } from "@/lib/tauri";
+import { checkCliStatus, getHostPlatform, type CliStatus, type HostPlatform } from "@/lib/tauri";
 import { useAppStore } from "@/store/app-store";
 import type { AgentModel } from "@/lib/types";
 
@@ -19,31 +20,52 @@ const cliSetup: Record<
   AgentModel,
   {
     title: string;
-    install: string;
+    install: Record<Exclude<HostPlatform, "web">, string>;
     login: string;
     docsUrl: string;
-    setupCommand: string;
+    setupCommand: Record<Exclude<HostPlatform, "web">, string>;
   }
 > = {
   "claude-code": {
     title: "Claude Code",
-    install: "curl -fsSL https://claude.ai/install.sh | bash",
+    install: {
+      macos: "npm install -g @anthropic-ai/claude-code",
+      unix: "npm install -g @anthropic-ai/claude-code",
+      windows: "npm install -g @anthropic-ai/claude-code",
+    },
     login: "claude auth login",
     docsUrl: "https://docs.anthropic.com/en/docs/claude-code/getting-started",
-    setupCommand:
-      "printf '\\nAgentrix: configurando Claude Code...\\n'; if ! command -v claude >/dev/null 2>&1; then curl -fsSL https://claude.ai/install.sh | bash; export PATH=\"$HOME/.local/bin:$HOME/.claude/local:$PATH\"; fi; claude auth status --text || claude auth login; claude --version",
+    setupCommand: {
+      macos:
+        "printf '\\nAgentrix: configurando Claude Code...\\n'; if ! command -v claude >/dev/null 2>&1; then npm install -g @anthropic-ai/claude-code; fi; claude --version; claude auth status --text || claude auth login || claude",
+      unix:
+        "printf '\\nAgentrix: configurando Claude Code...\\n'; if ! command -v claude >/dev/null 2>&1; then npm install -g @anthropic-ai/claude-code; fi; claude --version; claude auth status --text || claude auth login || claude",
+      windows:
+        "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"& { Write-Host ''; Write-Host 'Agentrix: configurando Claude Code...'; if (-not (Get-Command claude -ErrorAction SilentlyContinue)) { npm install -g @anthropic-ai/claude-code }; claude --version; claude auth status --text; if (`$LASTEXITCODE -ne 0) { claude auth login; if (`$LASTEXITCODE -ne 0) { claude } } }\"",
+    },
   },
   codex: {
     title: "Codex",
-    install: "npm install -g @openai/codex",
+    install: {
+      macos: "npm install -g @openai/codex",
+      unix: "npm install -g @openai/codex",
+      windows: "npm install -g @openai/codex",
+    },
     login: "codex login",
     docsUrl: "https://github.com/openai/codex",
-    setupCommand:
-      "printf '\\nAgentrix: configurando Codex CLI...\\n'; if ! command -v codex >/dev/null 2>&1; then npm install -g @openai/codex; fi; codex login status || codex login; codex --version",
+    setupCommand: {
+      macos:
+        "printf '\\nAgentrix: configurando Codex CLI...\\n'; if ! command -v codex >/dev/null 2>&1; then npm install -g @openai/codex; fi; codex --version; if [ -n \"$OPENAI_API_KEY\" ]; then printf 'OPENAI_API_KEY encontrado.\\n'; else codex login status || codex --login; fi",
+      unix:
+        "printf '\\nAgentrix: configurando Codex CLI...\\n'; if ! command -v codex >/dev/null 2>&1; then npm install -g @openai/codex; fi; codex --version; if [ -n \"$OPENAI_API_KEY\" ]; then printf 'OPENAI_API_KEY encontrado.\\n'; else codex login status || codex --login; fi",
+      windows:
+        "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"& { Write-Host ''; Write-Host 'Agentrix: configurando Codex CLI...'; if (-not (Get-Command codex -ErrorAction SilentlyContinue)) { npm install -g @openai/codex }; codex --version; if (`$env:OPENAI_API_KEY) { Write-Host 'OPENAI_API_KEY encontrado.' } else { codex login status; if (`$LASTEXITCODE -ne 0) { codex --login } } }\"",
+    },
   },
 };
 
 export function SettingsDialog() {
+  const [hostPlatform, setHostPlatform] = useState<HostPlatform>("web");
   const open = useAppStore((state) => state.settingsOpen);
   const setOpen = useAppStore((state) => state.setSettingsOpen);
   const settings = useAppStore((state) => state.settings);
@@ -53,20 +75,34 @@ export function SettingsDialog() {
   const addLog = useAppStore((state) => state.addLog);
   const addWorkspace = useAppStore((state) => state.addWorkspace);
   const activeAgentId = useAppStore((state) => state.activeAgentId);
+  const setupPlatform = useMemo(() => normalizeSetupPlatform(hostPlatform), [hostPlatform]);
+
+  useEffect(() => {
+    void getHostPlatform().then(setHostPlatform).catch(() => setHostPlatform("web"));
+  }, []);
 
   async function checkProvider(provider: AgentModel) {
     try {
-      const version = await checkCliStatus(provider);
+      const status = await checkCliStatus(provider);
+      const connected = status.installed && status.authenticated;
       updateConnection(provider, {
-        connected: true,
-        version,
+        connected,
+        installed: status.installed,
+        authenticated: status.authenticated,
+        version: status.version,
+        executable: status.executable,
         lastChecked: new Date().toISOString(),
-        error: undefined,
+        error: connectionError(status),
+        authMessage: status.authMessage,
+        installHint: status.installHint,
+        loginHint: status.loginHint,
       });
-      addLog(activeAgentId, "info", `${provider} CLI detectado: ${version}`);
+      addLog(activeAgentId, connected ? "info" : "warn", connectionLogMessage(provider, status));
     } catch (error) {
       updateConnection(provider, {
         connected: false,
+        installed: false,
+        authenticated: false,
         lastChecked: new Date().toISOString(),
         error: error instanceof Error ? error.message : String(error),
       });
@@ -107,7 +143,7 @@ export function SettingsDialog() {
       }
     }
     setOpen(false);
-    addWorkspace(provider, setup.setupCommand, `Setup ${setup.title}`);
+    addWorkspace(provider, setup.setupCommand[setupPlatform], `Setup ${setup.title}`);
     addLog(activeAgentId, "info", `Setup do ${setup.title} iniciado no terminal embutido.`);
   }
 
@@ -149,21 +185,24 @@ export function SettingsDialog() {
                           </div>
                         </div>
                         <Badge variant={connection.connected ? "success" : connection.error ? "error" : "secondary"}>
-                          {connection.connected ? "detectado" : connection.error ? "erro" : "nao verificado"}
+                          {connection.connected ? "pronto" : connection.error ? "acao necessaria" : "nao verificado"}
                         </Badge>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 text-xs text-text-muted">
-                        <StatusBox label="Status" value={connection.connected ? "CLI disponivel" : "CLI nao confirmado"} ok={connection.connected} />
+                      <div className="grid grid-cols-4 gap-3 text-xs text-text-muted">
+                        <StatusBox label="Instalacao" value={connection.installed ? "instalado" : "nao confirmado"} ok={Boolean(connection.installed)} />
+                        <StatusBox label="Login" value={connection.authenticated ? "autenticado" : "pendente"} ok={Boolean(connection.authenticated)} />
                         <InfoBox label="Versao" value={connection.version ?? "nao verificada"} />
                         <InfoBox label="Ultima verificacao" value={connection.lastChecked ? new Date(connection.lastChecked).toLocaleString() : "nunca"} />
                       </div>
 
                       {connection.error && <p className="mt-3 rounded-md border border-error bg-card p-3 text-xs text-error">{connection.error}</p>}
+                      {connection.authMessage && !connection.error && <p className="mt-3 rounded-md border bg-card p-3 text-xs text-text-muted">{connection.authMessage}</p>}
 
-                      <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-text-muted">
-                        <InfoBox label="Instalacao oficial" value={setup.install} />
+                      <div className="mt-3 grid grid-cols-3 gap-3 text-xs text-text-muted">
+                        <InfoBox label="Instalacao oficial" value={setup.install[setupPlatform]} />
                         <InfoBox label="Login oficial" value={setup.login} />
+                        <InfoBox label="Executavel" value={connection.executable ?? "auto"} />
                       </div>
 
                       <div className="mt-4 flex flex-wrap gap-2">
@@ -216,6 +255,33 @@ export function SettingsDialog() {
       </DialogContent>
     </Dialog>
   );
+}
+
+function normalizeSetupPlatform(platform: HostPlatform): Exclude<HostPlatform, "web"> {
+  if (platform === "windows" || platform === "macos") {
+    return platform;
+  }
+  return "unix";
+}
+
+function connectionError(status: CliStatus) {
+  if (!status.installed) {
+    return status.installMessage ?? `CLI nao encontrado. Instale com: ${status.installHint}`;
+  }
+  if (!status.authenticated) {
+    return status.authMessage ?? `Login nao confirmado. Rode: ${status.loginHint}`;
+  }
+  return undefined;
+}
+
+function connectionLogMessage(provider: AgentModel, status: CliStatus) {
+  if (status.installed && status.authenticated) {
+    return `${provider} pronto: ${status.version ?? "versao nao informada"}`;
+  }
+  if (!status.installed) {
+    return `${provider} nao instalado. ${status.installHint}`;
+  }
+  return `${provider} instalado, mas login pendente. ${status.loginHint}`;
 }
 
 function SettingGrid({ children }: { children: React.ReactNode }) {

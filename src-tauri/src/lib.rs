@@ -2,14 +2,26 @@ use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize}
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    env,
     io::{Read, Write},
+    path::PathBuf,
+    process::Output,
     sync::{Arc, Mutex},
     thread,
 };
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use uuid::Uuid;
 
 type SharedSessions = Arc<Mutex<HashMap<String, PtySession>>>;
+
+#[cfg(target_os = "macos")]
+const MENU_OPEN_FOLDER_ID: &str = "agentrix-open-folder";
+#[cfg(target_os = "macos")]
+const MENU_APPLY_ZOOM_ID: &str = "agentrix-apply-zoom";
+#[cfg(target_os = "macos")]
+const MENU_FILL_WINDOW_ID: &str = "agentrix-fill-window";
+#[cfg(target_os = "macos")]
+const MENU_CENTER_WINDOW_ID: &str = "agentrix-center-window";
 
 struct PtySession {
     writer: Box<dyn Write + Send>,
@@ -114,6 +126,20 @@ struct TokenUsagePayload {
     estimated_cost: f64,
 }
 
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct CliStatusPayload {
+    provider: String,
+    installed: bool,
+    authenticated: bool,
+    version: Option<String>,
+    executable: Option<String>,
+    install_message: Option<String>,
+    auth_message: Option<String>,
+    install_hint: String,
+    login_hint: String,
+}
+
 #[tauri::command]
 fn start_agent_session(
     app: AppHandle,
@@ -122,8 +148,8 @@ fn start_agent_session(
 ) -> Result<SessionStartedPayload, String> {
     let session_id = Uuid::new_v4().to_string();
     let program = match request.model {
-        AgentModel::ClaudeCode => "claude",
-        AgentModel::Codex => "codex",
+        AgentModel::ClaudeCode => cli_binary("claude"),
+        AgentModel::Codex => cli_binary("codex"),
     };
 
     let pty_system = native_pty_system();
@@ -136,7 +162,7 @@ fn start_agent_session(
         })
         .map_err(|error| format!("Failed to open PTY: {error}"))?;
 
-    let mut command = CommandBuilder::new(program);
+    let mut command = CommandBuilder::new(&program);
     match request.model {
         AgentModel::ClaudeCode => {
             if !request.model_id.trim().is_empty() {
@@ -209,7 +235,10 @@ fn start_terminal_session(
     request: StartTerminalRequest,
 ) -> Result<SessionStartedPayload, String> {
     let session_id = Uuid::new_v4().to_string();
-    let shell = request.shell.filter(|value| !value.trim().is_empty()).unwrap_or_else(default_shell);
+    let shell = request
+        .shell
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(default_shell);
 
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -348,23 +377,254 @@ fn resize_agent_session(
 }
 
 #[tauri::command]
-fn check_cli_status(provider: String) -> Result<String, String> {
-    let binary = match provider.as_str() {
-        "claude-code" => "claude",
-        "codex" => "codex",
+fn check_cli_status(provider: String) -> Result<CliStatusPayload, String> {
+    let spec = match provider.as_str() {
+        "claude-code" => CliSpec {
+            provider: "claude-code",
+            binary: "claude",
+            install_hint: "npm install -g @anthropic-ai/claude-code",
+            login_hint: "claude auth login",
+        },
+        "codex" => CliSpec {
+            provider: "codex",
+            binary: "codex",
+            install_hint: "npm install -g @openai/codex",
+            login_hint: "codex --login",
+        },
         _ => return Err("Unknown provider".to_string()),
     };
 
-    let status = std::process::Command::new(binary)
-        .arg("--version")
-        .output()
-        .map_err(|error| format!("{binary} CLI unavailable: {error}"))?;
+    Ok(check_cli_spec(spec))
+}
 
-    if status.status.success() {
-        Ok(String::from_utf8_lossy(&status.stdout).trim().to_string())
-    } else {
-        Err(String::from_utf8_lossy(&status.stderr).trim().to_string())
+struct CliSpec {
+    provider: &'static str,
+    binary: &'static str,
+    install_hint: &'static str,
+    login_hint: &'static str,
+}
+
+fn check_cli_spec(spec: CliSpec) -> CliStatusPayload {
+    let binary = resolve_cli_binary(spec.binary);
+    let version_output = run_cli_command(&binary, &["--version"]);
+
+    let (installed, version, install_message) =
+        match version_output {
+            Ok(output) if output.status.success() => (true, first_output_line(&output), None),
+            Ok(output) => (
+                false,
+                None,
+                Some(clean_command_output(&output).unwrap_or_else(|| {
+                    format!("{} respondeu, mas --version retornou erro.", binary)
+                })),
+            ),
+            Err(error) => (
+                false,
+                None,
+                Some(format!(
+                    "{} nao foi encontrado neste ambiente ({error}). Instale com: {}",
+                    binary, spec.install_hint
+                )),
+            ),
+        };
+
+    if !installed {
+        return CliStatusPayload {
+            provider: spec.provider.to_string(),
+            installed,
+            authenticated: false,
+            version,
+            executable: None,
+            install_message,
+            auth_message: Some("Login nao verificado porque o CLI nao esta instalado.".to_string()),
+            install_hint: spec.install_hint.to_string(),
+            login_hint: spec.login_hint.to_string(),
+        };
     }
+
+    let (authenticated, auth_message) = check_cli_auth(spec.provider, &binary);
+
+    CliStatusPayload {
+        provider: spec.provider.to_string(),
+        installed,
+        authenticated,
+        version,
+        executable: Some(binary),
+        install_message,
+        auth_message,
+        install_hint: spec.install_hint.to_string(),
+        login_hint: spec.login_hint.to_string(),
+    }
+}
+
+fn check_cli_auth(provider: &str, binary: &str) -> (bool, Option<String>) {
+    match provider {
+        "codex" => {
+            if env_var_is_present("OPENAI_API_KEY") {
+                return (
+                    true,
+                    Some("OPENAI_API_KEY encontrado no ambiente do app.".to_string()),
+                );
+            }
+            match run_cli_command(binary, &["login", "status"]) {
+                Ok(output) if output.status.success() => (
+                    true,
+                    clean_command_output(&output)
+                        .or_else(|| Some("Codex esta autenticado.".to_string())),
+                ),
+                Ok(output) => (
+                    false,
+                    clean_command_output(&output)
+                        .or_else(|| Some("Codex instalado, mas login nao confirmado.".to_string())),
+                ),
+                Err(error) => (
+                    false,
+                    Some(format!("Falha ao validar login do Codex: {error}")),
+                ),
+            }
+        }
+        "claude-code" => match run_cli_command(binary, &["auth", "status", "--text"]) {
+            Ok(output) if output.status.success() => (
+                true,
+                clean_command_output(&output)
+                    .or_else(|| Some("Claude Code esta autenticado.".to_string())),
+            ),
+            Ok(output) => (
+                false,
+                clean_command_output(&output).or_else(|| {
+                    Some("Claude Code instalado, mas login nao confirmado.".to_string())
+                }),
+            ),
+            Err(error) => (
+                false,
+                Some(format!("Falha ao validar login do Claude Code: {error}")),
+            ),
+        },
+        _ => (false, Some("Provider desconhecido.".to_string())),
+    }
+}
+
+fn run_cli_command(binary: &str, args: &[&str]) -> Result<Output, std::io::Error> {
+    std::process::Command::new(binary).args(args).output()
+}
+
+fn first_output_line(output: &Output) -> Option<String> {
+    clean_command_output(output).and_then(|text| {
+        text.lines()
+            .map(str::trim)
+            .find(|line| !line.is_empty())
+            .map(ToString::to_string)
+    })
+}
+
+fn clean_command_output(output: &Output) -> Option<String> {
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let combined = match (stdout.is_empty(), stderr.is_empty()) {
+        (false, false) => format!("{stdout}\n{stderr}"),
+        (false, true) => stdout,
+        (true, false) => stderr,
+        (true, true) => String::new(),
+    };
+    if combined.is_empty() {
+        None
+    } else {
+        Some(combined)
+    }
+}
+
+fn env_var_is_present(name: &str) -> bool {
+    env::var(name)
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn host_platform() -> &'static str {
+    #[cfg(target_os = "windows")]
+    {
+        "windows"
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        "macos"
+    }
+
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        "unix"
+    }
+}
+
+fn cli_binary(name: &str) -> String {
+    #[cfg(windows)]
+    {
+        format!("{name}.cmd")
+    }
+
+    #[cfg(not(windows))]
+    {
+        name.to_string()
+    }
+}
+
+fn resolve_cli_binary(name: &str) -> String {
+    let binary = cli_binary(name);
+    if run_cli_command(&binary, &["--version"]).is_ok() {
+        return binary;
+    }
+
+    for candidate in cli_candidate_paths(name) {
+        if candidate.is_file() {
+            let candidate = candidate.to_string_lossy().to_string();
+            if run_cli_command(&candidate, &["--version"]).is_ok() {
+                return candidate;
+            }
+        }
+    }
+
+    binary
+}
+
+fn cli_candidate_paths(name: &str) -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+    let binary = cli_binary(name);
+
+    if let Some(path_var) = env::var_os("PATH") {
+        paths.extend(env::split_paths(&path_var).map(|path| path.join(&binary)));
+    }
+
+    #[cfg(windows)]
+    {
+        if let Some(appdata) = env::var_os("APPDATA") {
+            paths.push(PathBuf::from(appdata).join("npm").join(&binary));
+        }
+        if let Some(profile) = env::var_os("USERPROFILE") {
+            paths.push(
+                PathBuf::from(profile)
+                    .join("AppData")
+                    .join("Roaming")
+                    .join("npm")
+                    .join(&binary),
+            );
+        }
+        paths.push(PathBuf::from("C:\\Program Files\\nodejs").join(&binary));
+    }
+
+    #[cfg(not(windows))]
+    {
+        paths.push(PathBuf::from("/opt/homebrew/bin").join(&binary));
+        paths.push(PathBuf::from("/usr/local/bin").join(&binary));
+        if let Some(home) = env::var_os("HOME") {
+            let home = PathBuf::from(home);
+            paths.push(home.join(".npm-global").join("bin").join(&binary));
+            paths.push(home.join(".local").join("bin").join(&binary));
+            paths.push(home.join(".claude").join("local").join(&binary));
+        }
+    }
+
+    paths
 }
 
 fn spawn_reader(
@@ -449,7 +709,13 @@ fn provider_label(model: &AgentModel) -> &'static str {
 fn default_shell() -> String {
     #[cfg(windows)]
     {
-        std::env::var("COMSPEC").unwrap_or_else(|_| "powershell.exe".to_string())
+        if command_is_available("pwsh.exe") {
+            "pwsh.exe".to_string()
+        } else if command_is_available("powershell.exe") {
+            "powershell.exe".to_string()
+        } else {
+            std::env::var("COMSPEC").unwrap_or_else(|_| "cmd.exe".to_string())
+        }
     }
 
     #[cfg(not(windows))]
@@ -458,12 +724,27 @@ fn default_shell() -> String {
     }
 }
 
+#[cfg(windows)]
+fn command_is_available(command: &str) -> bool {
+    std::process::Command::new(command)
+        .arg("-NoLogo")
+        .arg("-NoProfile")
+        .arg("-Command")
+        .arg("$PSVersionTable.PSVersion")
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
 fn add_interactive_shell_args(command: &mut CommandBuilder, shell: &str) {
     let lower = shell.to_ascii_lowercase();
     if lower.ends_with("zsh") || lower.ends_with("bash") || lower.ends_with("fish") {
         command.arg("-l");
-    } else if lower.contains("powershell") || lower.ends_with("pwsh.exe") || lower.ends_with("pwsh") {
+    } else if lower.contains("powershell") || lower.ends_with("pwsh.exe") || lower.ends_with("pwsh")
+    {
         command.arg("-NoLogo");
+    } else if lower.ends_with("cmd.exe") || lower.ends_with("cmd") {
+        command.arg("/Q");
     }
 }
 
@@ -488,7 +769,8 @@ fn detect_token_usage(agent_id: &str, session_id: &str, chunk: &str) -> Option<T
     let total = extract_first_number_after(&lower, "total")
         .or_else(|| extract_first_number_before(&lower, "tokens"))?;
     let input = extract_first_number_after(&lower, "input").unwrap_or(total / 2);
-    let output = extract_first_number_after(&lower, "output").unwrap_or(total.saturating_sub(input));
+    let output =
+        extract_first_number_after(&lower, "output").unwrap_or(total.saturating_sub(input));
 
     Some(TokenUsagePayload {
         agent_id: agent_id.to_string(),
@@ -522,19 +804,190 @@ fn extract_first_u64(text: &str) -> Option<u64> {
     number.parse().ok()
 }
 
+#[cfg(target_os = "macos")]
+fn install_macos_pt_br_menu(app: &mut tauri::App) -> tauri::Result<()> {
+    use tauri::menu::{
+        AboutMetadata, IconMenuItem, Menu, MenuItem, NativeIcon, PredefinedMenuItem, Submenu,
+    };
+
+    let about = PredefinedMenuItem::about(
+        app,
+        Some("Sobre o Agentrix"),
+        Some(AboutMetadata {
+            name: Some("Agentrix".to_string()),
+            version: Some(env!("CARGO_PKG_VERSION").to_string()),
+            ..Default::default()
+        }),
+    )?;
+    let services = PredefinedMenuItem::services(app, Some("Serviços"))?;
+    let hide = PredefinedMenuItem::hide(app, Some("Ocultar Agentrix"))?;
+    let hide_others = PredefinedMenuItem::hide_others(app, Some("Ocultar Outros"))?;
+    let show_all = PredefinedMenuItem::show_all(app, Some("Mostrar Todos"))?;
+    let quit = PredefinedMenuItem::quit(app, Some("Encerrar Agentrix"))?;
+
+    let open_folder = IconMenuItem::with_id_and_native_icon(
+        app,
+        MENU_OPEN_FOLDER_ID,
+        "Abrir Pasta...",
+        true,
+        Some(NativeIcon::Folder),
+        Some("CmdOrCtrl+O"),
+    )?;
+    let close = PredefinedMenuItem::close_window(app, Some("Fechar Janela"))?;
+
+    let undo = PredefinedMenuItem::undo(app, Some("Desfazer"))?;
+    let redo = PredefinedMenuItem::redo(app, Some("Refazer"))?;
+    let cut = PredefinedMenuItem::cut(app, Some("Recortar"))?;
+    let copy = PredefinedMenuItem::copy(app, Some("Copiar"))?;
+    let paste = PredefinedMenuItem::paste(app, Some("Colar"))?;
+    let select_all = PredefinedMenuItem::select_all(app, Some("Selecionar Tudo"))?;
+
+    let fullscreen = PredefinedMenuItem::fullscreen(app, Some("Entrar em Tela Cheia"))?;
+
+    let minimize = PredefinedMenuItem::minimize(app, Some("Minimizar"))?;
+    let apply_zoom = IconMenuItem::with_id_and_native_icon(
+        app,
+        MENU_APPLY_ZOOM_ID,
+        "Aplicar Zoom",
+        true,
+        Some(NativeIcon::IconView),
+        None::<&str>,
+    )?;
+    let fill_window = IconMenuItem::with_id_and_native_icon(
+        app,
+        MENU_FILL_WINDOW_ID,
+        "Preencher",
+        true,
+        Some(NativeIcon::EnterFullScreen),
+        Some("Ctrl+Cmd+F"),
+    )?;
+    let center_window = IconMenuItem::with_id_and_native_icon(
+        app,
+        MENU_CENTER_WINDOW_ID,
+        "Centralizar",
+        true,
+        Some(NativeIcon::ColumnView),
+        Some("Ctrl+Cmd+C"),
+    )?;
+    let bring_all_to_front =
+        PredefinedMenuItem::bring_all_to_front(app, Some("Trazer Tudo para Frente"))?;
+
+    let help = MenuItem::new(app, "Ajuda do Agentrix", false, None::<&str>)?;
+
+    let app_menu = Submenu::with_items(
+        app,
+        "Agentrix",
+        true,
+        &[
+            &about,
+            &PredefinedMenuItem::separator(app)?,
+            &services,
+            &PredefinedMenuItem::separator(app)?,
+            &hide,
+            &hide_others,
+            &show_all,
+            &PredefinedMenuItem::separator(app)?,
+            &quit,
+        ],
+    )?;
+    let file_menu = Submenu::with_items(
+        app,
+        "Arquivo",
+        true,
+        &[&open_folder, &PredefinedMenuItem::separator(app)?, &close],
+    )?;
+    let edit_menu = Submenu::with_items(
+        app,
+        "Editar",
+        true,
+        &[
+            &undo,
+            &redo,
+            &PredefinedMenuItem::separator(app)?,
+            &cut,
+            &copy,
+            &paste,
+            &select_all,
+        ],
+    )?;
+    let view_menu = Submenu::with_items(app, "Visualizar", true, &[])?;
+    let window_menu = Submenu::with_items(
+        app,
+        "Janela",
+        true,
+        &[
+            &minimize,
+            &apply_zoom,
+            &fill_window,
+            &center_window,
+            &fullscreen,
+            &PredefinedMenuItem::separator(app)?,
+            &bring_all_to_front,
+        ],
+    )?;
+    let help_menu = Submenu::with_items(app, "Ajuda", true, &[&help])?;
+
+    let menu = Menu::with_items(
+        app,
+        &[
+            &app_menu,
+            &file_menu,
+            &edit_menu,
+            &view_menu,
+            &window_menu,
+            &help_menu,
+        ],
+    )?;
+    app.set_menu(menu)?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn handle_macos_pt_br_menu_event(app: &AppHandle, event: tauri::menu::MenuEvent) {
+    if event.id() == MENU_OPEN_FOLDER_ID {
+        let _ = app.emit("agentrix-open-folder", ());
+        return;
+    }
+
+    if event.id() == MENU_APPLY_ZOOM_ID || event.id() == MENU_FILL_WINDOW_ID {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.maximize();
+        }
+        return;
+    }
+
+    if event.id() == MENU_CENTER_WINDOW_ID {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.center();
+        }
+    }
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .manage(SessionRegistry::default())
+        .on_menu_event(|app, event| {
+            #[cfg(target_os = "macos")]
+            handle_macos_pt_br_menu_event(app, event);
+        })
+        .setup(|app| {
+            #[cfg(target_os = "macos")]
+            install_macos_pt_br_menu(app)?;
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             start_agent_session,
             start_terminal_session,
             write_agent_session,
             stop_agent_session,
             resize_agent_session,
-            check_cli_status
+            check_cli_status,
+            host_platform
         ])
         .run(tauri::generate_context!())
         .expect("error while running Agentrix");

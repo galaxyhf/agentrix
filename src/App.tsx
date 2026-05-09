@@ -35,6 +35,7 @@ export default function App() {
   const updateAgent = useAppStore((state) => state.updateAgent);
   const detachSession = useAppStore((state) => state.detachSession);
   const updateTokenUsage = useAppStore((state) => state.updateTokenUsage);
+  const updateSettings = useAppStore((state) => state.updateSettings);
   const addLog = useAppStore((state) => state.addLog);
   const settings = useAppStore((state) => state.settings);
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -47,6 +48,7 @@ export default function App() {
     let cleanupStatus: (() => void) | undefined;
     let cleanupTokens: (() => void) | undefined;
     let cleanupOutput: (() => void) | undefined;
+    let cleanupOpenFolder: (() => void) | undefined;
 
     void listenTauri<StatusPayload>("agent-session-status", (payload) => {
       if (payload.status === "idle") {
@@ -95,14 +97,34 @@ export default function App() {
       cleanupOutput = cleanup;
     });
 
+    void listenTauri("agentrix-open-folder", async () => {
+      try {
+        const { open } = await import("@tauri-apps/plugin-dialog");
+        const selected = await open({
+          directory: true,
+          multiple: false,
+          title: "Abrir pasta",
+        });
+        if (typeof selected === "string") {
+          updateSettings({ defaultProjectsPath: selected });
+          addLog("no-terminal-selected", "info", `Pasta selecionada: ${selected}`);
+        }
+      } catch (error) {
+        addLog("no-terminal-selected", "error", error instanceof Error ? error.message : String(error));
+      }
+    }).then((cleanup) => {
+      cleanupOpenFolder = cleanup;
+    });
+
     return () => {
       activityTimers.current.forEach((timer) => clearTimeout(timer));
       activityTimers.current.clear();
       cleanupStatus?.();
       cleanupTokens?.();
       cleanupOutput?.();
+      cleanupOpenFolder?.();
     };
-  }, [addLog, detachSession, updateAgent, updateTokenUsage]);
+  }, [addLog, detachSession, updateAgent, updateSettings, updateTokenUsage]);
 
   if (!booted) {
     return (

@@ -262,7 +262,6 @@ export function Sidebar() {
       </ScrollArea>
 
       <div className="flex items-center justify-between border-t p-3 text-xs text-text-muted">
-        <span>v0.1.0</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button

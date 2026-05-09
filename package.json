@@ -9,7 +9,9 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "tauri:build:mac": "tauri build --bundles app",
+    "tauri:build:windows": "tauri build --bundles nsis,msi"
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.10",

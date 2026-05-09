@@ -42,9 +42,15 @@ export interface TokenUsage {
 export interface ProviderConnection {
   provider: AgentModel;
   connected: boolean;
+  installed?: boolean;
+  authenticated?: boolean;
   version?: string;
+  executable?: string;
   lastChecked?: string;
   error?: string;
+  authMessage?: string;
+  installHint?: string;
+  loginHint?: string;
 }
 
 export interface AgentrixSettings {
