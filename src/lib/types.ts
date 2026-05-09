@@ -55,19 +55,12 @@ export interface ProviderConnection {
 
 export interface AgentrixSettings {
   fontSize: number;
-  terminalRows: number;
-  terminalCols: number;
   density: "compact" | "comfortable" | "spacious";
-  accent: "violet" | "purple" | "fuchsia";
-  transparency: boolean;
-  animations: boolean;
+  accent: "violet" | "purple" | "fuchsia" | "red";
   zoom: number;
   cursorBlink: boolean;
-  scrollback: number;
   defaultShell: string;
-  copyOnSelect: boolean;
   pasteOnRightClick: boolean;
-  ptyPerformance: "balanced" | "latency" | "throughput";
   workspaceLayout: "single" | "grid";
   autoRestart: boolean;
   maxAgents: number;

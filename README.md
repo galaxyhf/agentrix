@@ -228,13 +228,9 @@ Na tela de Settings, você pode ajustar:
 - Pasta padrão de projetos.
 - Shell padrão.
 - Tamanho da fonte.
-- Linhas e colunas do PTY.
-- Scrollback do terminal.
 - Layout dos workspaces.
 - Tema/acento visual.
-- Copiar ao selecionar.
 - Colar com botão direito.
-- Modo de performance do PTY.
 
 ## Scripts
 

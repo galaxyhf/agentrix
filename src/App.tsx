@@ -148,8 +148,6 @@ export default function App() {
       <div
         className="flex h-full overflow-hidden bg-background text-text"
         data-density={settings.density}
-        data-animations={settings.animations}
-        data-transparency={settings.transparency}
         style={appStyle(settings.accent, settings.zoom)}
       >
         <Sidebar />
@@ -160,11 +158,12 @@ export default function App() {
   );
 }
 
-function appStyle(accent: "violet" | "purple" | "fuchsia", zoom: number): CSSProperties {
+function appStyle(accent: "violet" | "purple" | "fuchsia" | "red", zoom: number): CSSProperties {
   const accents = {
     violet: { accent: "#7c3aed", hover: "#a855f7", ring: "168 85 247" },
     purple: { accent: "#9333ea", hover: "#c084fc", ring: "192 132 252" },
     fuchsia: { accent: "#c026d3", hover: "#e879f9", ring: "232 121 249" },
+    red: { accent: "#dc2626", hover: "#ef4444", ring: "239 68 68" },
   };
   const selected = accents[accent];
 

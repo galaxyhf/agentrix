@@ -86,19 +86,6 @@
     --density-pad: 1.25rem;
   }
 
-  [data-transparency="true"] .bg-surface {
-    background-color: color-mix(in srgb, var(--color-surface) 88%, transparent);
-  }
-
-  [data-animations="false"] *,
-  [data-animations="false"] *::before,
-  [data-animations="false"] *::after {
-    animation-duration: 0.001ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.001ms !important;
-    scroll-behavior: auto !important;
-  }
-
   .terminal-shell .xterm {
     height: 100%;
     padding: var(--density-pad, 1rem);

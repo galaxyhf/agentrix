@@ -14,19 +14,12 @@ const emptyUsage: TokenUsage = {
 
 const defaultSettings: AgentrixSettings = {
   fontSize: 13,
-  terminalRows: 28,
-  terminalCols: 100,
   density: "comfortable",
   accent: "violet",
-  transparency: false,
-  animations: true,
   zoom: 100,
   cursorBlink: true,
-  scrollback: 5000,
   defaultShell: "",
-  copyOnSelect: true,
   pasteOnRightClick: true,
-  ptyPerformance: "balanced",
   workspaceLayout: "single",
   autoRestart: false,
   maxAgents: 6,
@@ -44,6 +37,34 @@ const defaultSettings: AgentrixSettings = {
   tauriEvents: true,
   backendLogLevel: "info",
 };
+
+function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): AgentrixSettings {
+  return {
+    fontSize: settings?.fontSize ?? defaultSettings.fontSize,
+    density: settings?.density ?? defaultSettings.density,
+    accent: settings?.accent ?? defaultSettings.accent,
+    zoom: settings?.zoom ?? defaultSettings.zoom,
+    cursorBlink: settings?.cursorBlink ?? defaultSettings.cursorBlink,
+    defaultShell: settings?.defaultShell ?? defaultSettings.defaultShell,
+    pasteOnRightClick: settings?.pasteOnRightClick ?? defaultSettings.pasteOnRightClick,
+    workspaceLayout: settings?.workspaceLayout ?? defaultSettings.workspaceLayout,
+    autoRestart: settings?.autoRestart ?? defaultSettings.autoRestart,
+    maxAgents: settings?.maxAgents ?? defaultSettings.maxAgents,
+    agentTimeout: settings?.agentTimeout ?? defaultSettings.agentTimeout,
+    defaultProjectsPath: settings?.defaultProjectsPath ?? defaultSettings.defaultProjectsPath,
+    autoSave: settings?.autoSave ?? defaultSettings.autoSave,
+    offlineSync: settings?.offlineSync ?? defaultSettings.offlineSync,
+    supabaseUrl: settings?.supabaseUrl ?? defaultSettings.supabaseUrl,
+    tokenLimit: settings?.tokenLimit ?? defaultSettings.tokenLimit,
+    costAlert: settings?.costAlert ?? defaultSettings.costAlert,
+    dailyReset: settings?.dailyReset ?? defaultSettings.dailyReset,
+    updateChannel: settings?.updateChannel ?? defaultSettings.updateChannel,
+    autoUpdate: settings?.autoUpdate ?? defaultSettings.autoUpdate,
+    debugMode: settings?.debugMode ?? defaultSettings.debugMode,
+    tauriEvents: settings?.tauriEvents ?? defaultSettings.tauriEvents,
+    backendLogLevel: settings?.backendLogLevel ?? defaultSettings.backendLogLevel,
+  };
+}
 
 const createAgent = (role: AgentRole, index: number, workspaceId: string | null = null, name?: string): Agent => ({
   id: id(),
@@ -330,7 +351,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
   },
   updateSettings: (patch) => {
-    set((state) => ({ settings: { ...state.settings, ...patch } }));
+    set((state) => ({ settings: normalizeSettings({ ...state.settings, ...patch }) }));
     void get().save();
   },
   updateConnection: (provider, patch) => {
@@ -389,10 +410,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         agents,
         activeWorkspaceId,
         activeAgentId,
-        settings: {
-          ...defaultSettings,
-          ...persisted.settings,
-        },
+        settings: normalizeSettings(persisted.settings),
         booted: true,
       });
       return;

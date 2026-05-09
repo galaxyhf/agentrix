@@ -8,6 +8,8 @@ import { listenTauri, resizeAgentSession, startTerminalSession, stopAgentSession
 import { useAppStore } from "@/store/app-store";
 import type { Agent } from "@/lib/types";
 
+const TERMINAL_SCROLLBACK = 5000;
+
 interface OutputPayload {
   agentId: string;
   sessionId: string;
@@ -80,7 +82,7 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
       cursorStyle: "block",
       fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       fontSize: settings.fontSize,
-      scrollback: settings.scrollback,
+      scrollback: TERMINAL_SCROLLBACK,
       theme: {
         background: token("--color-terminal-bg"),
         foreground: token("--color-text"),
@@ -113,13 +115,6 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
       if (sessionId?.startsWith("preview-")) {
         terminal.write(data);
       }
-    });
-
-    const selectionDisposable = terminal.onSelectionChange(() => {
-      if (!settings.copyOnSelect || !terminal.hasSelection()) {
-        return;
-      }
-      void navigator.clipboard?.writeText(terminal.getSelection());
     });
 
     const fitAndResizeSession = () => {
@@ -157,14 +152,13 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
         resizeTimerRef.current = null;
       }
       dataDisposable.dispose();
-      selectionDisposable.dispose();
       observer.disconnect();
       terminal.dispose();
       terminalRef.current = null;
       fitRef.current = null;
       terminalSizeRef.current = null;
     };
-  }, [agent.id, agent.name, settings.copyOnSelect, settings.cursorBlink, settings.fontSize, settings.scrollback]);
+  }, [agent.id, agent.name, settings.cursorBlink, settings.fontSize]);
 
   useEffect(() => {
     if (startedRef.current || agent.session_id || agent.status === "waiting" || agent.status === "running") {
@@ -183,8 +177,8 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
       systemPrompt: agent.system_prompt,
       cwd: workspace?.path || settings.defaultProjectsPath || undefined,
       shell: settings.defaultShell || undefined,
-      rows: terminalSize?.rows ?? settings.terminalRows,
-      cols: terminalSize?.cols ?? settings.terminalCols,
+      rows: terminalSize?.rows,
+      cols: terminalSize?.cols,
     })
       .then((started) => {
         sessionIdRef.current = started.sessionId;
@@ -204,8 +198,6 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
     attachSession,
     settings.defaultProjectsPath,
     settings.defaultShell,
-    settings.terminalCols,
-    settings.terminalRows,
     updateAgent,
     workspace?.path,
   ]);
