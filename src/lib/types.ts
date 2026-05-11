@@ -3,6 +3,14 @@ export type AgentModel = "claude-code" | "codex";
 export type AgentStatus = "idle" | "running" | "waiting" | "error";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
+export interface WorkspaceProfile {
+  id: string;
+  name: string;
+  provider: AgentModel;
+  terminalCount: number;
+  updatedAt: string;
+}
+
 export interface Agent {
   id: string;
   workspace_id: string | null;
@@ -77,6 +85,7 @@ export interface AgentrixSettings {
   debugMode: boolean;
   tauriEvents: boolean;
   backendLogLevel: "error" | "warn" | "info" | "debug";
+  workspaceProfiles: WorkspaceProfile[];
 }
 
 export interface SessionLog {

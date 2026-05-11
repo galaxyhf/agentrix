@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { DEFAULT_TEMPLATES, MODEL_COST_PER_1K, ROLE_PROMPTS } from "@/lib/constants";
-import type { Agent, AgentModel, AgentRole, AgentrixSettings, ProviderConnection, SessionLog, TokenUsage, Workspace } from "@/lib/types";
+import type { Agent, AgentModel, AgentRole, AgentrixSettings, ProviderConnection, SessionLog, TokenUsage, Workspace, WorkspaceProfile } from "@/lib/types";
 
 const now = () => new Date().toISOString();
 const id = () => (crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`);
@@ -36,7 +36,24 @@ const defaultSettings: AgentrixSettings = {
   debugMode: false,
   tauriEvents: true,
   backendLogLevel: "info",
+  workspaceProfiles: [],
 };
+
+function normalizeWorkspaceProfiles(profiles: WorkspaceProfile[] | undefined): WorkspaceProfile[] {
+  if (!Array.isArray(profiles)) {
+    return [];
+  }
+
+  return profiles
+    .filter((profile) => profile?.name && (profile.provider === "codex" || profile.provider === "claude-code"))
+    .map((profile) => ({
+      id: profile.id || id(),
+      name: profile.name.trim(),
+      provider: profile.provider,
+      terminalCount: Math.max(1, Math.floor(profile.terminalCount || 1)),
+      updatedAt: profile.updatedAt || now(),
+    }));
+}
 
 function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): AgentrixSettings {
   return {
@@ -63,6 +80,7 @@ function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): Age
     debugMode: settings?.debugMode ?? defaultSettings.debugMode,
     tauriEvents: settings?.tauriEvents ?? defaultSettings.tauriEvents,
     backendLogLevel: settings?.backendLogLevel ?? defaultSettings.backendLogLevel,
+    workspaceProfiles: normalizeWorkspaceProfiles(settings?.workspaceProfiles),
   };
 }
 
@@ -98,7 +116,10 @@ interface AppState {
   setActiveAgent: (agentId: string) => void;
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveWorkspacePath: (path: string) => void;
-  addWorkspace: (provider: AgentModel, pendingCommand?: string, name?: string) => void;
+  addWorkspace: (path?: string, name?: string) => void;
+  configureWorkspace: (workspaceId: string, provider: AgentModel, terminalCount: number, pendingCommand?: string) => void;
+  saveWorkspaceProfile: (profile: Omit<WorkspaceProfile, "id" | "updatedAt"> & { id?: string }) => void;
+  removeWorkspaceProfile: (profileId: string) => void;
   removeWorkspace: (workspaceId: string) => void;
   removeAllWorkspaces: () => void;
   addAgent: (role?: AgentRole) => void;
@@ -208,39 +229,99 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     void get().save();
   },
-  addWorkspace: (provider, pendingCommand, name) => {
+  addWorkspace: (path, name) => {
     const state = get();
-    const projectPath = state.settings.defaultProjectsPath.trim();
+    const projectPath = (path ?? state.settings.defaultProjectsPath).trim();
     if (!projectPath) {
       state.addLog(state.activeAgentId, "warn", "Selecione a pasta do projeto antes de criar workspaces.");
       return;
     }
 
-    if (state.agents.length >= state.settings.maxAgents) {
-      state.addLog(state.activeAgentId, "warn", "Limite maximo de workspaces simultaneos atingido.");
-      return;
-    }
-
-    const workspaceIndex = state.workspaces.filter((item) => item.path).length + 1;
     const projectName = workspaceNameFromPath(projectPath);
     const workspace: Workspace = {
       id: id(),
-      name: name ?? (workspaceIndex === 1 ? projectName : `${projectName} ${workspaceIndex}`),
+      name: name ?? projectName,
       path: projectPath,
       updatedAt: now(),
       synced: false,
     };
-    const agent = {
-      ...createAgent("CODER", state.agents.length + 1, workspace.id, workspace.name),
-      model: provider,
-      pending_command: pendingCommand ?? (provider === "claude-code" ? "claude" : "codex"),
-    };
 
     set((state) => ({
       workspaces: [...state.workspaces.filter((item) => item.path), workspace],
-      agents: [...state.agents, agent],
       activeWorkspaceId: workspace.id,
-      activeAgentId: agent.id,
+      activeAgentId: fallbackAgentId,
+      settings: normalizeSettings({ ...state.settings, defaultProjectsPath: projectPath }),
+    }));
+    void get().save();
+  },
+  configureWorkspace: (workspaceId, provider, terminalCount, pendingCommand) => {
+    const state = get();
+    const workspace = state.workspaces.find((item) => item.id === workspaceId);
+    if (!workspace) {
+      state.addLog(state.activeAgentId, "warn", "Workspace nao encontrado.");
+      return;
+    }
+
+    const existingWorkspaceAgents = state.agents.filter((agent) => agent.workspace_id === workspaceId);
+    if (existingWorkspaceAgents.length > 0) {
+      state.addLog(state.activeAgentId, "warn", "Remova os terminais atuais antes de reconfigurar este workspace.");
+      return;
+    }
+
+    const count = Math.min(Math.max(1, Math.floor(terminalCount)), state.settings.maxAgents);
+
+    const existingSameProvider = state.agents.filter((agent) => agent.model === provider).length;
+    const agents = Array.from({ length: count }, (_, index) => {
+      const agentIndex = existingSameProvider + index + 1;
+      return {
+        ...createAgent("CODER", agentIndex, workspaceId, count === 1 ? workspace.name : `${workspace.name} ${index + 1}`),
+        model: provider,
+        pending_command: pendingCommand ?? null,
+      };
+    });
+
+    set((current) => ({
+      agents: [...current.agents, ...agents],
+      activeWorkspaceId: workspaceId,
+      activeAgentId: agents[0]?.id ?? fallbackAgentId,
+    }));
+    void get().save();
+  },
+  saveWorkspaceProfile: (profile) => {
+    const cleanName = profile.name.trim();
+    if (!cleanName) {
+      get().addLog(get().activeAgentId, "warn", "Informe um nome para salvar o perfil.");
+      return;
+    }
+
+    const nextProfile: WorkspaceProfile = {
+      id: profile.id ?? id(),
+      name: cleanName,
+      provider: profile.provider,
+      terminalCount: Math.max(1, Math.min(get().settings.maxAgents, Math.floor(profile.terminalCount))),
+      updatedAt: now(),
+    };
+
+    set((state) => {
+      const existingByName = state.settings.workspaceProfiles.find((item) => item.name.toLowerCase() === cleanName.toLowerCase());
+      const profileId = profile.id ?? existingByName?.id ?? nextProfile.id;
+      const profileToSave = { ...nextProfile, id: profileId };
+      const withoutExisting = state.settings.workspaceProfiles.filter((item) => item.id !== profileId && item.name.toLowerCase() !== cleanName.toLowerCase());
+      return {
+        settings: normalizeSettings({
+          ...state.settings,
+          workspaceProfiles: [...withoutExisting, profileToSave],
+        }),
+      };
+    });
+    void get().save();
+  },
+  removeWorkspaceProfile: (profileId) => {
+    set((state) => ({
+      settings: normalizeSettings({
+        ...state.settings,
+        workspaceProfiles: state.settings.workspaceProfiles.filter((profile) => profile.id !== profileId),
+      }),
     }));
     void get().save();
   },
@@ -273,11 +354,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   addAgent: (role = "CODER") => {
     const state = get();
-    if (state.agents.length >= state.settings.maxAgents) {
-      state.addLog(state.activeAgentId, "warn", "Limite maximo de agentes simultaneos atingido.");
+    const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
+    const workspaceAgentCount = state.agents.filter((agent) => agent.workspace_id === activeWorkspace?.id).length;
+    if (workspaceAgentCount >= state.settings.maxAgents) {
+      state.addLog(state.activeAgentId, "warn", "Limite maximo de agentes simultaneos neste workspace atingido.");
       return;
     }
-    const activeWorkspace = state.workspaces.find((workspace) => workspace.id === state.activeWorkspaceId);
     const agent = createAgent(
       role,
       state.agents.filter((item) => item.role === role).length + 1,
@@ -292,8 +374,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
   removeAgent: (agentId) => {
     const state = get();
+    const removedAgent = state.agents.find((agent) => agent.id === agentId);
     const remaining = state.agents.filter((agent) => agent.id !== agentId);
-    const nextActive = state.activeAgentId === agentId ? remaining[0]?.id ?? fallbackAgentId : state.activeAgentId;
+    const nextActive =
+      state.activeAgentId === agentId
+        ? remaining.find((agent) => agent.workspace_id === removedAgent?.workspace_id)?.id ?? remaining[0]?.id ?? fallbackAgentId
+        : state.activeAgentId;
     set({
       agents: remaining,
       activeAgentId: nextActive,
@@ -394,6 +480,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const agents = (persisted.agents ?? initialAgents).map((agent: Agent) => ({
         ...agent,
         workspace_id: agent.workspace_id ?? persisted.activeWorkspaceId ?? null,
+        pending_command: agent.pending_command === "codex" || agent.pending_command === "claude" ? null : agent.pending_command,
         session_id: null,
         status: "idle" as const,
       }));

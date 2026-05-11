@@ -74,6 +74,7 @@ export function SettingsDialog() {
   const updateConnection = useAppStore((state) => state.updateConnection);
   const addLog = useAppStore((state) => state.addLog);
   const addWorkspace = useAppStore((state) => state.addWorkspace);
+  const configureWorkspace = useAppStore((state) => state.configureWorkspace);
   const activeAgentId = useAppStore((state) => state.activeAgentId);
   const setupPlatform = useMemo(() => normalizeSetupPlatform(hostPlatform), [hostPlatform]);
 
@@ -125,7 +126,8 @@ export function SettingsDialog() {
 
   async function runCliSetup(provider: AgentModel) {
     const setup = cliSetup[provider];
-    if (!useAppStore.getState().settings.defaultProjectsPath) {
+    let setupPath = useAppStore.getState().settings.defaultProjectsPath;
+    if (!setupPath) {
       try {
         const { open } = await import("@tauri-apps/plugin-dialog");
         const selected = await open({
@@ -136,6 +138,7 @@ export function SettingsDialog() {
         if (typeof selected !== "string") {
           return;
         }
+        setupPath = selected;
         updateSettings({ defaultProjectsPath: selected });
       } catch (error) {
         addLog(activeAgentId, "error", error instanceof Error ? error.message : String(error));
@@ -143,7 +146,9 @@ export function SettingsDialog() {
       }
     }
     setOpen(false);
-    addWorkspace(provider, setup.setupCommand[setupPlatform], `Setup ${setup.title}`);
+    addWorkspace(setupPath, `Setup ${setup.title}`);
+    const workspaceId = useAppStore.getState().activeWorkspaceId;
+    configureWorkspace(workspaceId, provider, 1, setup.setupCommand[setupPlatform]);
     addLog(activeAgentId, "info", `Setup do ${setup.title} iniciado no terminal embutido.`);
   }
 

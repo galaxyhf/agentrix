@@ -186,9 +186,12 @@ fn start_agent_session(
         command.cwd(cwd);
     }
 
+    command.env("TERM", "xterm-256color");
+    command.env("COLORTERM", "truecolor");
     command.env("AGENTRIX_AGENT_ID", &request.agent_id);
     command.env("AGENTRIX_AGENT_ROLE", role_label(&request.role));
     command.env("AGENTRIX_SYSTEM_PROMPT", &request.system_prompt);
+    command.env("AGENTRIX_PROVIDER", provider_label(&request.model));
     command.env("AGENTRIX_MODEL_ID", &request.model_id);
 
     let child = pair

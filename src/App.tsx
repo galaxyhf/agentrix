@@ -36,6 +36,7 @@ export default function App() {
   const detachSession = useAppStore((state) => state.detachSession);
   const updateTokenUsage = useAppStore((state) => state.updateTokenUsage);
   const updateSettings = useAppStore((state) => state.updateSettings);
+  const addWorkspace = useAppStore((state) => state.addWorkspace);
   const addLog = useAppStore((state) => state.addLog);
   const settings = useAppStore((state) => state.settings);
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -107,6 +108,7 @@ export default function App() {
         });
         if (typeof selected === "string") {
           updateSettings({ defaultProjectsPath: selected });
+          addWorkspace(selected);
           addLog("no-terminal-selected", "info", `Pasta selecionada: ${selected}`);
         }
       } catch (error) {
@@ -124,7 +126,7 @@ export default function App() {
       cleanupOutput?.();
       cleanupOpenFolder?.();
     };
-  }, [addLog, detachSession, updateAgent, updateSettings, updateTokenUsage]);
+  }, [addLog, addWorkspace, detachSession, updateAgent, updateSettings, updateTokenUsage]);
 
   if (!booted) {
     return (
