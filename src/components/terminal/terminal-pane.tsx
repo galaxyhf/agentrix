@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { Trash2 } from "lucide-react";
+import { Maximize2, Minimize2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { listenTauri, resizeAgentSession, startAgentSession, startTerminalSession, stopAgentSession, writeAgentSession } from "@/lib/tauri";
@@ -21,9 +21,11 @@ interface OutputPayload {
 interface TerminalPaneProps {
   agent: Agent;
   visible: boolean;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
 }
 
-export function TerminalPane({ agent, visible }: TerminalPaneProps) {
+export function TerminalPane({ agent, visible, expanded = false, onToggleExpanded }: TerminalPaneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -315,14 +317,26 @@ export function TerminalPane({ agent, visible }: TerminalPaneProps) {
     <div className="flex h-full min-h-0 flex-col bg-terminal-bg">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 text-xs font-medium text-text">
         <span className="truncate">{agent.name || workspace?.name}</span>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost" size="icon" className="size-6" onClick={() => void deleteTerminal()} aria-label={`Apagar ${agent.name}`}>
-              <Trash2 className="size-3.5" />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Apagar terminal</TooltipContent>
-        </Tooltip>
+        <div className="flex shrink-0 items-center gap-1">
+          {onToggleExpanded && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="size-6" onClick={onToggleExpanded} aria-label={expanded ? "Restaurar terminal" : "Expandir terminal"}>
+                  {expanded ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{expanded ? "Restaurar terminal" : "Expandir terminal"}</TooltipContent>
+            </Tooltip>
+          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-6" onClick={() => void deleteTerminal()} aria-label={`Apagar ${agent.name}`}>
+                <Trash2 className="size-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Apagar terminal</TooltipContent>
+          </Tooltip>
+        </div>
       </div>
       <div
         ref={containerRef}

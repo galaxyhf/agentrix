@@ -6,8 +6,8 @@ export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "
 export interface WorkspaceProfile {
   id: string;
   name: string;
-  provider: AgentModel;
-  terminalCount: number;
+  codexCount: number;
+  claudeCount: number;
   updatedAt: string;
 }
 

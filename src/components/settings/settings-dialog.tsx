@@ -148,7 +148,7 @@ export function SettingsDialog() {
     setOpen(false);
     addWorkspace(setupPath, `Setup ${setup.title}`);
     const workspaceId = useAppStore.getState().activeWorkspaceId;
-    configureWorkspace(workspaceId, provider, 1, setup.setupCommand[setupPlatform]);
+    configureWorkspace(workspaceId, provider === "codex" ? 1 : 0, provider === "claude-code" ? 1 : 0, setup.setupCommand[setupPlatform]);
     addLog(activeAgentId, "info", `Setup do ${setup.title} iniciado no terminal embutido.`);
   }
 

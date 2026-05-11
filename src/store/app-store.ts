@@ -39,20 +39,26 @@ const defaultSettings: AgentrixSettings = {
   workspaceProfiles: [],
 };
 
-function normalizeWorkspaceProfiles(profiles: WorkspaceProfile[] | undefined): WorkspaceProfile[] {
+function normalizeWorkspaceProfiles(profiles: Array<Partial<WorkspaceProfile> & { provider?: AgentModel; terminalCount?: number }> | undefined): WorkspaceProfile[] {
   if (!Array.isArray(profiles)) {
     return [];
   }
 
   return profiles
-    .filter((profile) => profile?.name && (profile.provider === "codex" || profile.provider === "claude-code"))
-    .map((profile) => ({
-      id: profile.id || id(),
-      name: profile.name.trim(),
-      provider: profile.provider,
-      terminalCount: Math.max(1, Math.floor(profile.terminalCount || 1)),
-      updatedAt: profile.updatedAt || now(),
-    }));
+    .filter((profile) => profile?.name)
+    .map((profile) => {
+      const legacyTerminalCount = Math.max(1, Math.floor(profile.terminalCount || 1));
+      const legacyCodexCount = profile.provider === "codex" ? legacyTerminalCount : 0;
+      const legacyClaudeCount = profile.provider === "claude-code" ? legacyTerminalCount : 0;
+      return {
+        id: profile.id || id(),
+        name: profile.name?.trim() ?? "Perfil",
+        codexCount: Math.max(0, Math.floor(profile.codexCount ?? legacyCodexCount)),
+        claudeCount: Math.max(0, Math.floor(profile.claudeCount ?? legacyClaudeCount)),
+        updatedAt: profile.updatedAt || now(),
+      };
+    })
+    .filter((profile) => profile.codexCount + profile.claudeCount > 0);
 }
 
 function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): AgentrixSettings {
@@ -117,7 +123,7 @@ interface AppState {
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveWorkspacePath: (path: string) => void;
   addWorkspace: (path?: string, name?: string) => void;
-  configureWorkspace: (workspaceId: string, provider: AgentModel, terminalCount: number, pendingCommand?: string) => void;
+  configureWorkspace: (workspaceId: string, codexCount: number, claudeCount: number, pendingCommand?: string) => void;
   saveWorkspaceProfile: (profile: Omit<WorkspaceProfile, "id" | "updatedAt"> & { id?: string }) => void;
   removeWorkspaceProfile: (profileId: string) => void;
   removeWorkspace: (workspaceId: string) => void;
@@ -254,7 +260,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     void get().save();
   },
-  configureWorkspace: (workspaceId, provider, terminalCount, pendingCommand) => {
+  configureWorkspace: (workspaceId, codexCount, claudeCount, pendingCommand) => {
     const state = get();
     const workspace = state.workspaces.find((item) => item.id === workspaceId);
     if (!workspace) {
@@ -268,13 +274,26 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
-    const count = Math.min(Math.max(1, Math.floor(terminalCount)), state.settings.maxAgents);
+    const maxAgents = state.settings.maxAgents;
+    const requestedCodexCount = Math.max(0, Math.floor(codexCount));
+    const requestedClaudeCount = Math.max(0, Math.floor(claudeCount));
+    const requestedTotal = requestedCodexCount + requestedClaudeCount;
+    if (requestedTotal === 0) {
+      state.addLog(state.activeAgentId, "warn", "Escolha pelo menos um terminal para criar.");
+      return;
+    }
 
-    const existingSameProvider = state.agents.filter((agent) => agent.model === provider).length;
-    const agents = Array.from({ length: count }, (_, index) => {
-      const agentIndex = existingSameProvider + index + 1;
+    const finalCodexCount = Math.min(requestedCodexCount, maxAgents);
+    const finalClaudeCount = Math.min(requestedClaudeCount, maxAgents - finalCodexCount);
+    const terminalSpecs = [
+      ...Array.from({ length: finalCodexCount }, () => "codex" as const),
+      ...Array.from({ length: finalClaudeCount }, () => "claude-code" as const),
+    ];
+
+    const agents = terminalSpecs.map((provider, index) => {
+      const providerIndex = state.agents.filter((agent) => agent.model === provider).length + terminalSpecs.slice(0, index + 1).filter((item) => item === provider).length;
       return {
-        ...createAgent("CODER", agentIndex, workspaceId, count === 1 ? workspace.name : `${workspace.name} ${index + 1}`),
+        ...createAgent("CODER", providerIndex, workspaceId, terminalSpecs.length === 1 ? workspace.name : `${workspace.name} ${index + 1}`),
         model: provider,
         pending_command: pendingCommand ?? null,
       };
@@ -294,11 +313,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       return;
     }
 
+    const codexCount = Math.max(0, Math.floor(profile.codexCount));
+    const claudeCount = Math.max(0, Math.floor(profile.claudeCount));
+    if (codexCount + claudeCount === 0) {
+      get().addLog(get().activeAgentId, "warn", "Escolha pelo menos um terminal para salvar o perfil.");
+      return;
+    }
+
     const nextProfile: WorkspaceProfile = {
       id: profile.id ?? id(),
       name: cleanName,
-      provider: profile.provider,
-      terminalCount: Math.max(1, Math.min(get().settings.maxAgents, Math.floor(profile.terminalCount))),
+      codexCount: Math.min(get().settings.maxAgents, codexCount),
+      claudeCount: Math.min(get().settings.maxAgents, claudeCount),
       updatedAt: now(),
     };
 

@@ -156,9 +156,17 @@ export function Sidebar() {
             const errorAgents = workspaceAgents.filter((agent) => agent.status === "error");
             const status = errorAgents[0]?.status ?? activeAgents[0]?.status ?? workspaceAgents[0]?.status ?? "idle";
             const isActive = activeWorkspaceId === workspace.id;
-            const isClaude = workspaceAgents[0]?.model === "claude-code";
-            const ProviderIcon = isClaude ? Bot : Code2;
-            const providerLabel = workspaceAgents.length === 0 ? "Configurar" : isClaude ? "Claude Code" : "Codex";
+            const codexCount = workspaceAgents.filter((agent) => agent.model === "codex").length;
+            const claudeCount = workspaceAgents.filter((agent) => agent.model === "claude-code").length;
+            const ProviderIcon = claudeCount > codexCount ? Bot : Code2;
+            const providerLabel =
+              workspaceAgents.length === 0
+                ? "Configurar"
+                : claudeCount > 0 && codexCount > 0
+                  ? `Codex ${codexCount} / Claude ${claudeCount}`
+                  : claudeCount > 0
+                    ? "Claude Code"
+                    : "Codex";
             const terminalLabel = workspaceAgents.length === 0 ? "sem terminais" : `${workspaceAgents.length} ${workspaceAgents.length === 1 ? "terminal" : "terminais"}`;
             return (
               <div

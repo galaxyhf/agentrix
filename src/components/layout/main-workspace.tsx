@@ -4,7 +4,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TerminalPane } from "@/components/terminal/terminal-pane";
-import type { AgentModel } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 
@@ -16,9 +15,11 @@ export function MainWorkspace() {
   const settings = useAppStore((state) => state.settings);
   const setActiveAgent = useAppStore((state) => state.setActiveAgent);
   const configureWorkspace = useAppStore((state) => state.configureWorkspace);
+  const [expandedAgentId, setExpandedAgentId] = useState<string | null>(null);
   const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId) ?? workspaces[0];
   const activeWorkspaceAgents = activeWorkspace ? allAgents.filter((agent) => agent.workspace_id === activeWorkspace.id) : [];
   const visibleAgentId = activeWorkspaceAgents.some((agent) => agent.id === activeAgentId) ? activeAgentId : activeWorkspaceAgents[0]?.id;
+  const expandedAgent = expandedAgentId ? activeWorkspaceAgents.find((agent) => agent.id === expandedAgentId) : null;
   const isGridLayout = settings.workspaceLayout === "grid";
 
   if (!activeWorkspace) {
@@ -42,7 +43,7 @@ export function MainWorkspace() {
   if (activeWorkspaceAgents.length === 0) {
     return (
       <main className="relative min-w-0 flex-1 overflow-hidden bg-background">
-        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(provider, count) => configureWorkspace(activeWorkspace.id, provider, count)} />
+        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(codexCount, claudeCount) => configureWorkspace(activeWorkspace.id, codexCount, claudeCount)} />
       </main>
     );
   }
@@ -51,23 +52,30 @@ export function MainWorkspace() {
     <main
       className={cn(
         "relative min-w-0 flex-1 overflow-hidden bg-background",
-        isGridLayout
+        expandedAgent
+          ? "relative"
+          : isGridLayout
           ? "grid gap-2 p-2"
           : "relative",
-        isGridLayout && activeWorkspaceAgents.length <= 1 && "grid-cols-1",
-        isGridLayout && activeWorkspaceAgents.length === 2 && "grid-cols-2",
-        isGridLayout && activeWorkspaceAgents.length >= 3 && activeWorkspaceAgents.length <= 4 && "grid-cols-2 grid-rows-2",
-        isGridLayout && activeWorkspaceAgents.length >= 5 && "grid-cols-3 grid-rows-2",
+        !expandedAgent && isGridLayout && activeWorkspaceAgents.length <= 1 && "grid-cols-1",
+        !expandedAgent && isGridLayout && activeWorkspaceAgents.length === 2 && "grid-cols-2",
+        !expandedAgent && isGridLayout && activeWorkspaceAgents.length >= 3 && activeWorkspaceAgents.length <= 4 && "grid-cols-2 grid-rows-2",
+        !expandedAgent && isGridLayout && activeWorkspaceAgents.length >= 5 && "grid-cols-3 grid-rows-2",
       )}
     >
       {activeWorkspaceAgents.map((agent) => {
-        const isVisible = isGridLayout || agent.id === visibleAgentId;
+        const isExpanded = expandedAgent?.id === agent.id;
+        const isVisible = expandedAgent ? isExpanded : isGridLayout || agent.id === visibleAgentId;
         return (
           <section
             key={agent.id}
             className={cn(
               "min-h-0 min-w-0 overflow-hidden bg-terminal-bg",
-              isGridLayout
+              expandedAgent
+                ? isExpanded
+                  ? "visible absolute inset-0 z-20 opacity-100"
+                  : "invisible pointer-events-none absolute inset-0 z-0 opacity-0"
+                : isGridLayout
                 ? "relative rounded-md border"
                 : isVisible
                   ? "visible absolute inset-0 z-10 opacity-100"
@@ -86,7 +94,15 @@ export function MainWorkspace() {
               }
             }}
           >
-            <TerminalPane agent={agent} visible={isVisible} />
+            <TerminalPane
+              agent={agent}
+              visible={isVisible}
+              expanded={isExpanded}
+              onToggleExpanded={() => {
+                setExpandedAgentId((current) => (current === agent.id ? null : agent.id));
+                setActiveAgent(agent.id);
+              }}
+            />
           </section>
         );
       })}
@@ -97,29 +113,33 @@ export function MainWorkspace() {
 interface WorkspaceSetupProps {
   workspaceName: string;
   workspacePath: string;
-  onStart: (provider: AgentModel, count: number) => void;
+  onStart: (codexCount: number, claudeCount: number) => void;
 }
 
 function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetupProps) {
   const settings = useAppStore((state) => state.settings);
   const saveWorkspaceProfile = useAppStore((state) => state.saveWorkspaceProfile);
   const availableSlots = settings.maxAgents;
-  const [provider, setProvider] = useState<AgentModel>("codex");
-  const [terminalCount, setTerminalCount] = useState(Math.min(2, Math.max(1, availableSlots)));
+  const [codexCount, setCodexCount] = useState(availableSlots >= 2 ? 1 : Math.min(1, availableSlots));
+  const [claudeCount, setClaudeCount] = useState(availableSlots >= 2 ? 1 : 0);
   const [profileName, setProfileName] = useState("");
-  const count = Math.min(terminalCount, Math.max(1, availableSlots));
-  const canCreateTerminals = availableSlots > 0;
+  const totalCount = codexCount + claudeCount;
+  const canCreateTerminals = totalCount > 0;
   const profiles = settings.workspaceProfiles;
 
-  function updateCount(next: number) {
-    setTerminalCount(Math.min(availableSlots, Math.max(1, next)));
+  function updateCodexCount(next: number) {
+    setCodexCount(Math.min(Math.max(0, next), Math.max(0, availableSlots - claudeCount)));
+  }
+
+  function updateClaudeCount(next: number) {
+    setClaudeCount(Math.min(Math.max(0, next), Math.max(0, availableSlots - codexCount)));
   }
 
   function saveProfile() {
     saveWorkspaceProfile({
       name: profileName,
-      provider,
-      terminalCount: count,
+      codexCount,
+      claudeCount,
     });
     setProfileName("");
   }
@@ -129,9 +149,11 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
     if (!profile) {
       return;
     }
-    setProvider(profile.provider);
-    setTerminalCount(profile.terminalCount);
-    onStart(profile.provider, profile.terminalCount);
+    const nextCodexCount = Math.min(profile.codexCount, availableSlots);
+    const nextClaudeCount = Math.min(profile.claudeCount, Math.max(0, availableSlots - nextCodexCount));
+    setCodexCount(nextCodexCount);
+    setClaudeCount(nextClaudeCount);
+    onStart(nextCodexCount, nextClaudeCount);
   }
 
   return (
@@ -143,45 +165,33 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           <p className="mt-2 max-w-2xl truncate text-xs text-text-muted">{workspacePath}</p>
         </div>
 
-          <div className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+          <div className="grid gap-4 lg:grid-cols-2">
             <section className="rounded-md border bg-background p-4">
-              <h3 className="text-sm font-semibold text-text">CLI inicial</h3>
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <ProviderButton
-                  active={provider === "codex"}
-                  icon={Code2}
-                  label="Codex"
-                  description="Abre cada terminal ja chamando o Codex CLI."
-                  onClick={() => setProvider("codex")}
-                />
-                <ProviderButton
-                  active={provider === "claude-code"}
-                  icon={Bot}
-                  label="Claude Code"
-                  description="Abre cada terminal ja chamando o Claude Code CLI."
-                  onClick={() => setProvider("claude-code")}
-                />
-              </div>
+              <TerminalCountControl
+                icon={Code2}
+                label="Codex"
+                description="Terminais que abrem direto no Codex CLI."
+                value={codexCount}
+                max={availableSlots - claudeCount}
+                onChange={updateCodexCount}
+              />
             </section>
 
             <section className="rounded-md border bg-background p-4">
-              <h3 className="text-sm font-semibold text-text">Terminais</h3>
-              <div className="mt-4 flex items-center justify-between gap-3">
-                <Button variant="outline" size="icon" onClick={() => updateCount(count - 1)} disabled={count <= 1} aria-label="Diminuir terminais">
-                  <Minus />
-                </Button>
-                <div className="grid h-16 min-w-0 flex-1 place-items-center rounded-md border bg-surface">
-                  <span className="text-3xl font-semibold leading-none text-text">{count}</span>
-                </div>
-                <Button variant="outline" size="icon" onClick={() => updateCount(count + 1)} disabled={!canCreateTerminals || count >= availableSlots} aria-label="Aumentar terminais">
-                  <Plus />
-                </Button>
-              </div>
-              <p className="mt-3 text-xs leading-5 text-text-muted">
-                Limite disponivel neste app: {availableSlots} {availableSlots === 1 ? "terminal" : "terminais"}.
-              </p>
+              <TerminalCountControl
+                icon={Bot}
+                label="Claude Code"
+                description="Terminais que abrem direto no Claude Code CLI."
+                value={claudeCount}
+                max={availableSlots - codexCount}
+                onChange={updateClaudeCount}
+              />
             </section>
           </div>
+
+          <p className="mt-3 text-xs leading-5 text-text-muted">
+            Total: {totalCount} de {availableSlots} {availableSlots === 1 ? "terminal" : "terminais"} neste workspace.
+          </p>
 
           <section className="mt-4 rounded-md border bg-background p-4">
             <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
@@ -199,7 +209,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
                   <SelectContent>
                     {profiles.map((profile) => (
                       <SelectItem key={profile.id} value={profile.id}>
-                        {profile.name} · {providerLabel(profile.provider)} · {profile.terminalCount}
+                        {profile.name} · Codex {profile.codexCount} · Claude {profile.claudeCount}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -220,8 +230,8 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           </section>
 
           <div className="mt-5 flex justify-end">
-            <Button onClick={() => onStart(provider, count)} disabled={!canCreateTerminals} className="gap-2">
-              {provider === "claude-code" ? <Bot /> : <Code2 />}
+            <Button onClick={() => onStart(codexCount, claudeCount)} disabled={!canCreateTerminals} className="gap-2">
+              <Plus />
               Criar terminais
             </Button>
           </div>
@@ -230,35 +240,38 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
   );
 }
 
-function providerLabel(provider: AgentModel) {
-  return provider === "claude-code" ? "Claude Code" : "Codex";
-}
-
-interface ProviderButtonProps {
-  active: boolean;
+interface TerminalCountControlProps {
   icon: typeof Code2;
   label: string;
   description: string;
-  onClick: () => void;
+  value: number;
+  max: number;
+  onChange: (next: number) => void;
 }
 
-function ProviderButton({ active, icon: Icon, label, description, onClick }: ProviderButtonProps) {
+function TerminalCountControl({ icon: Icon, label, description, value, max, onChange }: TerminalCountControlProps) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex min-h-[104px] items-start gap-3 rounded-md border bg-surface p-3 text-left transition-colors hover:border-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
-        active && "border-accent bg-card ring-1 ring-inset ring-accent",
-      )}
-    >
-      <span className="grid size-8 shrink-0 place-items-center rounded-md border bg-background text-text">
-        <Icon className="size-4" />
-      </span>
-      <span className="min-w-0">
-        <span className="block text-sm font-semibold text-text">{label}</span>
-        <span className="mt-1 block text-xs leading-5 text-text-muted">{description}</span>
-      </span>
-    </button>
+    <div>
+      <div className="flex items-start gap-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-md border bg-surface text-text">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-text">{label}</h3>
+          <p className="mt-1 text-xs leading-5 text-text-muted">{description}</p>
+        </div>
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <Button variant="outline" size="icon" onClick={() => onChange(value - 1)} disabled={value <= 0} aria-label={`Diminuir ${label}`}>
+          <Minus />
+        </Button>
+        <div className="grid h-16 min-w-0 flex-1 place-items-center rounded-md border bg-surface">
+          <span className="text-3xl font-semibold leading-none text-text">{value}</span>
+        </div>
+        <Button variant="outline" size="icon" onClick={() => onChange(value + 1)} disabled={max <= 0} aria-label={`Aumentar ${label}`}>
+          <Plus />
+        </Button>
+      </div>
+    </div>
   );
 }
