@@ -21,6 +21,7 @@ export function MainWorkspace() {
   const visibleAgentId = activeWorkspaceAgents.some((agent) => agent.id === activeAgentId) ? activeAgentId : activeWorkspaceAgents[0]?.id;
   const expandedAgent = expandedAgentId ? activeWorkspaceAgents.find((agent) => agent.id === expandedAgentId) : null;
   const isGridLayout = settings.workspaceLayout === "grid";
+  const gridColumns = isGridLayout ? gridColumnCount(activeWorkspaceAgents.length) : 1;
 
   if (!activeWorkspace) {
     return (
@@ -55,13 +56,10 @@ export function MainWorkspace() {
         expandedAgent
           ? "relative"
           : isGridLayout
-          ? "grid gap-2 p-2"
+          ? "grid auto-rows-fr gap-2 p-2"
           : "relative",
-        !expandedAgent && isGridLayout && activeWorkspaceAgents.length <= 1 && "grid-cols-1",
-        !expandedAgent && isGridLayout && activeWorkspaceAgents.length === 2 && "grid-cols-2",
-        !expandedAgent && isGridLayout && activeWorkspaceAgents.length >= 3 && activeWorkspaceAgents.length <= 4 && "grid-cols-2 grid-rows-2",
-        !expandedAgent && isGridLayout && activeWorkspaceAgents.length >= 5 && "grid-cols-3 grid-rows-2",
       )}
+      style={!expandedAgent && isGridLayout ? { gridTemplateColumns: `repeat(${gridColumns}, minmax(0, 1fr))` } : undefined}
     >
       {activeWorkspaceAgents.map((agent) => {
         const isExpanded = expandedAgent?.id === agent.id;
@@ -110,6 +108,16 @@ export function MainWorkspace() {
   );
 }
 
+function gridColumnCount(count: number) {
+  if (count <= 1) {
+    return 1;
+  }
+  if (count <= 4) {
+    return 2;
+  }
+  return 3;
+}
+
 interface WorkspaceSetupProps {
   workspaceName: string;
   workspacePath: string;
@@ -128,11 +136,15 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
   const profiles = settings.workspaceProfiles;
 
   function updateCodexCount(next: number) {
-    setCodexCount(Math.min(Math.max(0, next), Math.max(0, availableSlots - claudeCount)));
+    const normalized = Math.min(Math.max(0, next), availableSlots);
+    setCodexCount(normalized);
+    setClaudeCount((current) => Math.min(current, Math.max(0, availableSlots - normalized)));
   }
 
   function updateClaudeCount(next: number) {
-    setClaudeCount(Math.min(Math.max(0, next), Math.max(0, availableSlots - codexCount)));
+    const normalized = Math.min(Math.max(0, next), availableSlots);
+    setClaudeCount(normalized);
+    setCodexCount((current) => Math.min(current, Math.max(0, availableSlots - normalized)));
   }
 
   function saveProfile() {
@@ -172,7 +184,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
                 label="Codex"
                 description="Terminais que abrem direto no Codex CLI."
                 value={codexCount}
-                max={availableSlots - claudeCount}
+                max={availableSlots}
                 onChange={updateCodexCount}
               />
             </section>
@@ -183,7 +195,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
                 label="Claude Code"
                 description="Terminais que abrem direto no Claude Code CLI."
                 value={claudeCount}
-                max={availableSlots - codexCount}
+                max={availableSlots}
                 onChange={updateClaudeCount}
               />
             </section>
