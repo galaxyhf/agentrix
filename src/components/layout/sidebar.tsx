@@ -1,5 +1,4 @@
 import { Bot, Code2, Plus, Settings, Trash2 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -10,30 +9,10 @@ import {
 import { stopAgentSession } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
-import type { AgentStatus } from "@/lib/types";
-
-const statusVariant: Record<
-  AgentStatus,
-  "secondary" | "success" | "error" | "default"
-> = {
-  idle: "secondary",
-  running: "success",
-  waiting: "default",
-  error: "error",
-};
-
-const statusLabel: Record<AgentStatus, string> = {
-  idle: "idle",
-  running: "running",
-  waiting: "ready",
-  error: "error",
-};
-
 export function Sidebar() {
   const workspaces = useAppStore((state) => state.workspaces);
   const activeWorkspaceId = useAppStore((state) => state.activeWorkspaceId);
   const agents = useAppStore((state) => state.agents);
-  const settings = useAppStore((state) => state.settings);
   const setActiveWorkspace = useAppStore((state) => state.setActiveWorkspace);
   const addWorkspace = useAppStore((state) => state.addWorkspace);
   const removeWorkspace = useAppStore((state) => state.removeWorkspace);
@@ -103,13 +82,10 @@ export function Sidebar() {
       <ScrollArea className="min-h-0 flex-1">
         <div className="space-y-2 px-3 py-3 pr-5">
           <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex min-w-0 items-center gap-2 rounded-md border bg-background/80 px-2 py-1.5 text-xs font-semibold text-text">
-              <span className="size-2 shrink-0 rounded-full bg-accent shadow-[0_0_10px_color-mix(in_srgb,var(--color-accent)_70%,transparent)]" />
-              <span className="truncate">
-                {settings.defaultProjectsPath
-                  ? folderNameFromPath(settings.defaultProjectsPath)
-                  : "Nenhuma pasta selecionada"}
-              </span>
+            <div className="min-w-0">
+              <p className="text-[0.65rem] font-medium uppercase tracking-[0.16em] text-text-muted">
+                Workspaces
+              </p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               <Tooltip>
@@ -152,12 +128,24 @@ export function Sidebar() {
 
           {workspaces.map((workspace) => {
             const workspaceAgents = agentsForWorkspace(workspace.id);
-            const activeAgents = workspaceAgents.filter((agent) => agent.status === "running");
-            const errorAgents = workspaceAgents.filter((agent) => agent.status === "error");
-            const status = errorAgents[0]?.status ?? activeAgents[0]?.status ?? workspaceAgents[0]?.status ?? "idle";
+            const activeAgents = workspaceAgents.filter(
+              (agent) => agent.status === "running",
+            );
+            const errorAgents = workspaceAgents.filter(
+              (agent) => agent.status === "error",
+            );
+            const status =
+              errorAgents[0]?.status ??
+              activeAgents[0]?.status ??
+              workspaceAgents[0]?.status ??
+              "idle";
             const isActive = activeWorkspaceId === workspace.id;
-            const codexCount = workspaceAgents.filter((agent) => agent.model === "codex").length;
-            const claudeCount = workspaceAgents.filter((agent) => agent.model === "claude-code").length;
+            const codexCount = workspaceAgents.filter(
+              (agent) => agent.model === "codex",
+            ).length;
+            const claudeCount = workspaceAgents.filter(
+              (agent) => agent.model === "claude-code",
+            ).length;
             const ProviderIcon = claudeCount > codexCount ? Bot : Code2;
             const providerLabel =
               workspaceAgents.length === 0
@@ -167,7 +155,10 @@ export function Sidebar() {
                   : claudeCount > 0
                     ? "Claude Code"
                     : "Codex";
-            const terminalLabel = workspaceAgents.length === 0 ? "sem terminais" : `${workspaceAgents.length} ${workspaceAgents.length === 1 ? "terminal" : "terminais"}`;
+            const terminalLabel =
+              workspaceAgents.length === 0
+                ? "sem terminais"
+                : `${workspaceAgents.length} ${workspaceAgents.length === 1 ? "terminal" : "terminais"}`;
             return (
               <div
                 key={workspace.id}
@@ -182,7 +173,8 @@ export function Sidebar() {
                 }}
                 className={cn(
                   "group flex min-h-[116px] w-full cursor-pointer flex-col justify-between overflow-hidden rounded-lg border bg-background/80 p-3 transition-colors hover:border-accent/70 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
-                  isActive && "border-accent bg-card ring-1 ring-inset ring-accent",
+                  isActive &&
+                    "border-accent bg-card ring-1 ring-inset ring-accent",
                 )}
               >
                 <div className="w-full min-w-0 text-left">
@@ -197,13 +189,21 @@ export function Sidebar() {
                       {providerLabel}
                     </span>
                     <span className="shrink-0 text-text-muted/70">·</span>
-                    <span className="min-w-0 truncate whitespace-nowrap">{terminalLabel}</span>
+                    <span className="min-w-0 truncate whitespace-nowrap">
+                      {terminalLabel}
+                    </span>
                   </div>
                 </div>
                 <div className="mt-3 flex h-7 items-center justify-between gap-2 pr-0.5">
-                  <Badge
-                    variant={statusVariant[status]}
-                    className="h-6 min-w-[5.5rem] shrink-0 justify-center gap-1.5 px-2"
+                  <div
+                    className={cn(
+                      "flex h-6 min-w-[5.5rem] shrink-0 items-center justify-center gap-1.5 rounded-md border px-2 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
+                      status === "error"
+                        ? "border-error/50 bg-error/10 text-error"
+                        : status === "running"
+                          ? "border-success/50 bg-success/10 text-success"
+                          : "border-border bg-surface text-text-muted",
+                    )}
                   >
                     <span
                       className={cn(
@@ -211,8 +211,14 @@ export function Sidebar() {
                         status === "running" && "animate-pulse",
                       )}
                     />
-                    <span className="truncate">{statusLabel[status]}</span>
-                  </Badge>
+                    <span className="truncate">
+                      {status === "running"
+                        ? "running"
+                        : status === "waiting"
+                          ? "ready"
+                          : status}
+                    </span>
+                  </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -254,8 +260,4 @@ export function Sidebar() {
       </div>
     </aside>
   );
-}
-
-function folderNameFromPath(path: string) {
-  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
 }

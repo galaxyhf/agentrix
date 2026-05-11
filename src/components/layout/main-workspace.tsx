@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Bot, Code2, FolderOpen, Minus, Plus, Save } from "lucide-react";
+import { Bot, Code2, FolderOpen, Grid3X3, Minus, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TerminalPane } from "@/components/terminal/terminal-pane";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -127,10 +126,13 @@ interface WorkspaceSetupProps {
 function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetupProps) {
   const settings = useAppStore((state) => state.settings);
   const saveWorkspaceProfile = useAppStore((state) => state.saveWorkspaceProfile);
+  const removeWorkspaceProfile = useAppStore((state) => state.removeWorkspaceProfile);
   const availableSlots = settings.maxAgents;
   const [codexCount, setCodexCount] = useState(availableSlots >= 2 ? 1 : Math.min(1, availableSlots));
   const [claudeCount, setClaudeCount] = useState(availableSlots >= 2 ? 1 : 0);
   const [profileName, setProfileName] = useState("");
+  const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const totalCount = codexCount + claudeCount;
   const canCreateTerminals = totalCount > 0;
   const profiles = settings.workspaceProfiles;
@@ -149,11 +151,13 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
 
   function saveProfile() {
     saveWorkspaceProfile({
+      id: editingProfileId ?? undefined,
       name: profileName,
       codexCount,
       claudeCount,
     });
     setProfileName("");
+    setEditingProfileId(null);
   }
 
   function applyProfile(profileId: string) {
@@ -165,7 +169,19 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
     const nextClaudeCount = Math.min(profile.claudeCount, Math.max(0, availableSlots - nextCodexCount));
     setCodexCount(nextCodexCount);
     setClaudeCount(nextClaudeCount);
+    setSelectedProfileId(profile.id);
     onStart(nextCodexCount, nextClaudeCount);
+  }
+
+  function editProfile(profileId: string) {
+    const profile = profiles.find((item) => item.id === profileId);
+    if (!profile) {
+      return;
+    }
+    setEditingProfileId(profile.id);
+    setProfileName(profile.name);
+    setCodexCount(Math.min(profile.codexCount, availableSlots));
+    setClaudeCount(Math.min(profile.claudeCount, Math.max(0, availableSlots - profile.codexCount)));
   }
 
   return (
@@ -206,37 +222,95 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           </p>
 
           <section className="mt-4 rounded-md border bg-background p-4">
-            <div className="grid gap-4 lg:grid-cols-[1fr_1.2fr]">
+            <div className="grid gap-4">
               <div>
-                <h3 className="text-sm font-semibold text-text">Perfil</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-[0.16em] text-text-muted">Perfis</h3>
+                  <span className="text-xs text-text-muted">{profiles.length}</span>
+                </div>
                 <p className="mt-1 text-xs leading-5 text-text-muted">
                   Salve a combinacao atual ou selecione um perfil para criar os terminais agora.
                 </p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <Select onValueChange={applyProfile} disabled={!canCreateTerminals || profiles.length === 0}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={profiles.length === 0 ? "Nenhum perfil salvo" : "Selecionar perfil"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {profiles.map((profile) => (
-                      <SelectItem key={profile.id} value={profile.id}>
-                        {profile.name} · Codex {profile.codexCount} · Claude {profile.claudeCount}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div className="flex min-w-0 gap-2">
-                  <Input
-                    value={profileName}
-                    onChange={(event) => setProfileName(event.target.value)}
-                    placeholder="Nome do perfil"
-                    className="min-w-0"
-                  />
-                  <Button variant="outline" size="icon" onClick={saveProfile} disabled={!profileName.trim()} aria-label="Salvar perfil">
-                    <Save />
-                  </Button>
+
+              {profiles.length > 0 && (
+                <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                  {profiles.map((profile) => {
+                    const isSelected = selectedProfileId === profile.id;
+                    return (
+                      <div
+                        key={profile.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => applyProfile(profile.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            applyProfile(profile.id);
+                          }
+                        }}
+                        className={cn(
+                          "group flex h-20 min-w-0 cursor-pointer items-center gap-3 rounded-md border bg-surface/70 px-3 text-left transition-colors hover:border-accent/70 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                          isSelected && "border-accent bg-card ring-1 ring-inset ring-accent",
+                        )}
+                        aria-label={`Usar perfil ${profile.name}`}
+                      >
+                        <span className="grid size-11 shrink-0 place-items-center rounded-md border bg-background text-text-muted">
+                          <Grid3X3 className="size-5" />
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-semibold text-text">{profile.name}</p>
+                          <p className="mt-1 truncate text-xs text-text-muted">{profileSummary(profile.codexCount, profile.claudeCount)}</p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              editProfile(profile.id);
+                            }}
+                            aria-label={`Editar ${profile.name}`}
+                          >
+                            <Pencil />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeWorkspaceProfile(profile.id);
+                              if (selectedProfileId === profile.id) {
+                                setSelectedProfileId(null);
+                              }
+                              if (editingProfileId === profile.id) {
+                                setEditingProfileId(null);
+                                setProfileName("");
+                              }
+                            }}
+                            aria-label={`Excluir ${profile.name}`}
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
+
+              <div className="flex min-w-0 gap-2">
+                <Input
+                  value={profileName}
+                  onChange={(event) => setProfileName(event.target.value)}
+                  placeholder={editingProfileId ? "Renomear perfil" : "Nome do perfil"}
+                  className="min-w-0"
+                />
+                <Button variant="outline" size="icon" onClick={saveProfile} disabled={!profileName.trim()} aria-label={editingProfileId ? "Atualizar perfil" : "Salvar perfil"}>
+                  <Save />
+                </Button>
               </div>
             </div>
           </section>
@@ -250,6 +324,17 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
       </div>
     </section>
   );
+}
+
+function profileSummary(codexCount: number, claudeCount: number) {
+  const parts = [];
+  if (codexCount > 0) {
+    parts.push(`Codex ${codexCount}`);
+  }
+  if (claudeCount > 0) {
+    parts.push(`Claude ${claudeCount}`);
+  }
+  return parts.join(" / ");
 }
 
 interface TerminalCountControlProps {
