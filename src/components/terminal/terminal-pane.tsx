@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from "react";
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { Maximize2, Minimize2, Trash2 } from "lucide-react";
+import { Loader2, Maximize2, Minimize2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { listenTauri, resizeAgentSession, startAgentSession, startTerminalSession, stopAgentSession, writeAgentSession } from "@/lib/tauri";
+import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
 import type { Agent } from "@/lib/types";
 
 const TERMINAL_SCROLLBACK = 5000;
 const MAX_BUFFER_CHARS = 250000;
 const terminalOutputBuffers = new Map<string, string>();
+const readyTerminalIds = new Set<string>();
 
 interface OutputPayload {
   agentId: string;
@@ -32,10 +34,12 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
   const sessionIdRef = useRef<string | null>(agent.session_id);
   const terminalSizeRef = useRef<{ rows: number; cols: number } | null>(null);
   const resizeTimerRef = useRef<number | null>(null);
+  const readyTimerRef = useRef<number | null>(null);
   const startedRef = useRef(false);
   const visibleRef = useRef(visible);
   const pendingCommandRef = useRef<string | null | undefined>(agent.pending_command);
   const [outputListenerReady, setOutputListenerReady] = useState(false);
+  const [terminalReady, setTerminalReady] = useState(() => readyTerminalIds.has(agent.id) || Boolean(terminalOutputBuffers.get(agent.id)));
   const settings = useAppStore((state) => state.settings);
   const workspaces = useAppStore((state) => state.workspaces);
   const attachSession = useAppStore((state) => state.attachSession);
@@ -52,6 +56,17 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
   useEffect(() => {
     pendingCommandRef.current = agent.pending_command;
   }, [agent.pending_command]);
+
+  useEffect(() => {
+    if (!agent.session_id) {
+      readyTerminalIds.delete(agent.id);
+      setTerminalReady(false);
+      if (readyTimerRef.current !== null) {
+        window.clearTimeout(readyTimerRef.current);
+        readyTimerRef.current = null;
+      }
+    }
+  }, [agent.id, agent.session_id]);
 
   useEffect(() => {
     visibleRef.current = visible;
@@ -179,6 +194,10 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
         window.clearTimeout(resizeTimerRef.current);
         resizeTimerRef.current = null;
       }
+      if (readyTimerRef.current !== null) {
+        window.clearTimeout(readyTimerRef.current);
+        readyTimerRef.current = null;
+      }
       dataDisposable.dispose();
       observer.disconnect();
       terminal.dispose();
@@ -201,6 +220,16 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
       }
       if (payload.sessionId === sessionIdRef.current) {
         appendTerminalOutput(agent.id, payload.data);
+        if (!readyTerminalIds.has(agent.id)) {
+          if (readyTimerRef.current !== null) {
+            window.clearTimeout(readyTimerRef.current);
+          }
+          readyTimerRef.current = window.setTimeout(() => {
+            readyTerminalIds.add(agent.id);
+            setTerminalReady(true);
+            readyTimerRef.current = null;
+          }, 650);
+        }
         const terminal = terminalRef.current;
         if (!terminal) {
           return;
@@ -295,6 +324,7 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
       await stopAgentSession(agent.session_id);
     }
     terminalOutputBuffers.delete(agent.id);
+    readyTerminalIds.delete(agent.id);
     detachSession(agent.id);
     removeAgent(agent.id);
   }
@@ -314,7 +344,7 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-terminal-bg">
+    <div className="relative flex h-full min-h-0 flex-col bg-terminal-bg">
       <div className="flex h-8 shrink-0 items-center justify-between gap-2 border-b bg-surface px-3 text-xs font-medium text-text">
         <span className="truncate">{agent.name || workspace?.name}</span>
         <div className="flex shrink-0 items-center gap-1">
@@ -340,12 +370,23 @@ export function TerminalPane({ agent, visible, expanded = false, onToggleExpande
       </div>
       <div
         ref={containerRef}
-        className="terminal-shell min-h-0 flex-1 overflow-hidden"
+        className={cn(
+          "terminal-shell min-h-0 flex-1 overflow-hidden transition-opacity duration-200",
+          !terminalReady && agent.status !== "error" && "opacity-0",
+        )}
         onContextMenu={(event) => {
           event.preventDefault();
           void pasteFromClipboard();
         }}
       />
+      {!terminalReady && agent.status !== "error" && (
+        <div className="pointer-events-none absolute inset-8 top-16 grid place-items-center text-text">
+          <div className="flex flex-col items-center gap-3">
+            <Loader2 className="size-6 animate-spin text-accent" />
+            <p className="text-xs font-medium text-text-muted">Carregando terminal</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
