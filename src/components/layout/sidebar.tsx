@@ -172,7 +172,7 @@ export function Sidebar() {
                   }
                 }}
                 className={cn(
-                  "group flex min-h-[116px] w-full cursor-pointer flex-col justify-between overflow-hidden rounded-lg border bg-background/80 p-3 transition-colors hover:border-accent/70 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
+                  "group flex min-h-[96px] w-full cursor-pointer flex-col justify-between overflow-hidden rounded-lg border bg-background/80 px-3 py-2.5 transition-colors hover:border-accent/70 hover:bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
                   isActive &&
                     "border-accent bg-card ring-1 ring-inset ring-accent",
                 )}
@@ -181,7 +181,7 @@ export function Sidebar() {
                   <span className="block truncate text-sm font-semibold leading-5 text-text">
                     {workspace.name}
                   </span>
-                  <div className="mt-2 flex min-w-0 items-center gap-2 text-xs text-text-muted">
+                  <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-text-muted">
                     <span className="grid size-6 shrink-0 place-items-center rounded-md border bg-surface text-text">
                       <ProviderIcon className="size-3.5" />
                     </span>
@@ -194,7 +194,7 @@ export function Sidebar() {
                     </span>
                   </div>
                 </div>
-                <div className="mt-3 flex h-7 items-center justify-between gap-2 pr-0.5">
+                <div className="mt-2 flex h-7 items-center justify-between gap-2 pr-0.5">
                   <div
                     className={cn(
                       "flex h-6 min-w-[5.5rem] shrink-0 items-center justify-center gap-1.5 rounded-md border px-2 text-[0.65rem] font-semibold uppercase tracking-[0.08em]",
