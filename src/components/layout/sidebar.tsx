@@ -1,4 +1,4 @@
-import { Bot, Code2, Plus, Settings, Trash2 } from "lucide-react";
+import { Bot, Code2, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -19,6 +19,7 @@ export function Sidebar() {
   const removeAllWorkspaces = useAppStore((state) => state.removeAllWorkspaces);
   const updateSettings = useAppStore((state) => state.updateSettings);
   const setSettingsOpen = useAppStore((state) => state.setSettingsOpen);
+  const sidebarCollapsed = useAppStore((state) => state.settings.sidebarCollapsed);
 
   function agentsForWorkspace(workspaceId: string) {
     return agents.filter((agent) => agent.workspace_id === workspaceId);
@@ -70,8 +71,64 @@ export function Sidebar() {
     }
   }
 
+  if (sidebarCollapsed) {
+    return (
+      <aside className="flex h-full w-16 shrink-0 flex-col border-r bg-surface transition-[width] duration-200 ease-out">
+        <div className="grid h-18.5 place-items-center border-b">
+          <span className="text-lg font-semibold leading-none">A</span>
+        </div>
+        <div className="flex flex-1 flex-col items-center gap-2 px-2 py-3">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="size-9"
+                onClick={() => void createWorkspace()}
+                aria-label="Novo workspace"
+              >
+                <Plus />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Novo workspace</TooltipContent>
+          </Tooltip>
+        </div>
+        <div className="flex flex-col items-end gap-2 border-t p-2 text-xs text-text-muted">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9"
+                onClick={() => setSettingsOpen(true)}
+                aria-label="Settings"
+              >
+                <Settings />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Settings</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="size-9"
+                onClick={() => updateSettings({ sidebarCollapsed: false })}
+                aria-label="Expandir sidebar"
+              >
+                <PanelLeftOpen />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="right">Expandir sidebar</TooltipContent>
+          </Tooltip>
+        </div>
+      </aside>
+    );
+  }
+
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-r bg-surface">
+    <aside className="flex h-full w-80 shrink-0 flex-col border-r bg-surface transition-[width] duration-200 ease-out">
       <div className="border-b p-3">
         <div>
           <h1 className="text-lg font-semibold leading-none">AGENTRIX</h1>
@@ -256,6 +313,19 @@ export function Sidebar() {
             </Button>
           </TooltipTrigger>
           <TooltipContent>Settings</TooltipContent>
+        </Tooltip>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => updateSettings({ sidebarCollapsed: true })}
+              aria-label="Recolher sidebar"
+            >
+              <PanelLeftClose />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Recolher sidebar</TooltipContent>
         </Tooltip>
       </div>
     </aside>

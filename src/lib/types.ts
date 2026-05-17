@@ -69,6 +69,7 @@ export interface AgentrixSettings {
   cursorBlink: boolean;
   defaultShell: string;
   pasteOnRightClick: boolean;
+  sidebarCollapsed: boolean;
   workspaceLayout: "single" | "grid";
   autoRestart: boolean;
   maxAgents: number;

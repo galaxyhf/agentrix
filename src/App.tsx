@@ -46,6 +46,23 @@ export default function App() {
   }, [load]);
 
   useEffect(() => {
+    function toggleSidebar(event: KeyboardEvent) {
+      const isMac = navigator.platform.toLowerCase().includes("mac");
+      const modifierPressed = isMac ? event.metaKey : event.ctrlKey;
+
+      if (!modifierPressed || event.altKey || event.shiftKey || event.key.toLowerCase() !== "b") {
+        return;
+      }
+
+      event.preventDefault();
+      updateSettings({ sidebarCollapsed: !useAppStore.getState().settings.sidebarCollapsed });
+    }
+
+    window.addEventListener("keydown", toggleSidebar);
+    return () => window.removeEventListener("keydown", toggleSidebar);
+  }, [updateSettings]);
+
+  useEffect(() => {
     let cleanupStatus: (() => void) | undefined;
     let cleanupTokens: (() => void) | undefined;
     let cleanupOutput: (() => void) | undefined;
