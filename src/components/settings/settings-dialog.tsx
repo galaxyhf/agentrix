@@ -62,6 +62,24 @@ const cliSetup: Record<
         "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"& { Write-Host ''; Write-Host 'Agentrix: configurando Codex CLI...'; if (-not (Get-Command codex -ErrorAction SilentlyContinue)) { npm install -g @openai/codex }; codex --version; if (`$env:OPENAI_API_KEY) { Write-Host 'OPENAI_API_KEY encontrado.' } else { codex login status; if (`$LASTEXITCODE -ne 0) { codex --login } } }\"",
     },
   },
+  gemini: {
+    title: "Gemini CLI",
+    install: {
+      macos: "npm install -g @google/gemini-cli",
+      unix: "npm install -g @google/gemini-cli",
+      windows: "npm install -g @google/gemini-cli",
+    },
+    login: "gemini",
+    docsUrl: "https://google-gemini.github.io/gemini-cli/docs/get-started/",
+    setupCommand: {
+      macos:
+        "printf '\\nAgentrix: configurando Gemini CLI...\\n'; if ! command -v gemini >/dev/null 2>&1; then npm install -g @google/gemini-cli; fi; gemini --version; printf '\\nSe o login ainda nao estiver pronto, escolha Login with Google no Gemini CLI.\\n'; gemini",
+      unix:
+        "printf '\\nAgentrix: configurando Gemini CLI...\\n'; if ! command -v gemini >/dev/null 2>&1; then npm install -g @google/gemini-cli; fi; gemini --version; printf '\\nSe o login ainda nao estiver pronto, escolha Login with Google no Gemini CLI.\\n'; gemini",
+      windows:
+        "powershell -NoLogo -NoProfile -ExecutionPolicy Bypass -Command \"& { Write-Host ''; Write-Host 'Agentrix: configurando Gemini CLI...'; if (-not (Get-Command gemini -ErrorAction SilentlyContinue)) { npm install -g @google/gemini-cli }; gemini --version; Write-Host ''; Write-Host 'Se o login ainda nao estiver pronto, escolha Login with Google no Gemini CLI.'; gemini }\"",
+    },
+  },
 };
 
 export function SettingsDialog() {
@@ -148,7 +166,13 @@ export function SettingsDialog() {
     setOpen(false);
     addWorkspace(setupPath, `Setup ${setup.title}`);
     const workspaceId = useAppStore.getState().activeWorkspaceId;
-    configureWorkspace(workspaceId, provider === "codex" ? 1 : 0, provider === "claude-code" ? 1 : 0, setup.setupCommand[setupPlatform]);
+    configureWorkspace(
+      workspaceId,
+      provider === "codex" ? 1 : 0,
+      provider === "claude-code" ? 1 : 0,
+      provider === "gemini" ? 1 : 0,
+      setup.setupCommand[setupPlatform],
+    );
     addLog(activeAgentId, "info", `Setup do ${setup.title} iniciado no terminal embutido.`);
   }
 

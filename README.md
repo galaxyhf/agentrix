@@ -1,13 +1,13 @@
 # Agentrix
 
-Agentrix é um aplicativo desktop para rodar agentes de código, como Codex CLI e Claude Code, em terminais embutidos e organizados por workspace.
+Agentrix é um aplicativo desktop para rodar agentes de código, como Codex CLI, Claude Code e Gemini CLI, em terminais embutidos e organizados por workspace.
 
-Ele foi pensado para quem trabalha com vários projetos locais e quer abrir agentes de IA sem depender de janelas externas de terminal. Você seleciona uma pasta, cria um workspace Codex ou Claude, e acompanha tudo dentro do próprio app.
+Ele foi pensado para quem trabalha com vários projetos locais e quer abrir agentes de IA sem depender de janelas externas de terminal. Você seleciona uma pasta, cria um workspace Codex, Claude ou Gemini, e acompanha tudo dentro do próprio app.
 
 ## O que o app faz
 
 - Abre workspaces locais a partir de uma pasta do seu computador.
-- Roda Codex CLI e Claude Code em terminais embutidos.
+- Roda Codex CLI, Claude Code e Gemini CLI em terminais embutidos.
 - Permite manter vários terminais/agentes abertos ao mesmo tempo.
 - Suporta layout único ou em grid para comparar agentes.
 - Verifica instalação e login dos CLIs separadamente.
@@ -25,6 +25,7 @@ Você pode criar:
 
 - Workspace Codex
 - Workspace Claude Code
+- Workspace Gemini CLI
 
 ### Terminal embutido
 
@@ -47,6 +48,11 @@ Para Codex, o app considera autenticado quando:
 Para Claude Code, o app considera autenticado quando:
 
 - `claude auth status --text` retorna sucesso.
+
+Para Gemini CLI, o app considera autenticado quando:
+
+- `GEMINI_API_KEY`, `GOOGLE_API_KEY` ou `GOOGLE_APPLICATION_CREDENTIALS` existe no ambiente do app, ou
+- `~/.gemini/oauth_creds.json` existe depois do login interativo.
 
 ### Menu macOS
 
@@ -206,13 +212,29 @@ claude auth status --text
 
 No Windows, se `claude` não abrir corretamente, instale Git for Windows ou use WSL.
 
+### Gemini CLI
+
+Instalar:
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+Login:
+
+```bash
+gemini
+```
+
+Na primeira execução, escolha `Login with Google` ou configure uma chave via `GEMINI_API_KEY`.
+
 ## Como usar o Agentrix
 
 1. Abra o app.
 2. Clique em `Settings`.
-3. Em `Conexões`, instale/verifique Codex e Claude Code.
+3. Em `Conexões`, instale/verifique Codex, Claude Code e Gemini CLI.
 4. Selecione uma pasta de projeto.
-5. Crie um workspace Codex ou Claude.
+5. Crie um workspace Codex, Claude ou Gemini.
 6. Use o terminal embutido para interagir com o agente.
 
 Também é possível selecionar a pasta pelo menu macOS:
@@ -246,13 +268,14 @@ Na tela de Settings, você pode ajustar:
 
 ## Solução de problemas
 
-### O app não encontra o Codex ou Claude
+### O app não encontra o Codex, Claude ou Gemini
 
 Verifique se o CLI está instalado:
 
 ```sh
 codex --version
 claude --version
+gemini --version
 ```
 
 Se funcionar no terminal, mas não no app, reinicie o Agentrix. Apps desktop podem não herdar imediatamente alterações recentes no `PATH`.
@@ -276,6 +299,16 @@ Rode:
 claude auth login
 claude auth status --text
 ```
+
+### Gemini instalado, mas login pendente
+
+Rode:
+
+```bash
+gemini
+```
+
+Depois escolha `Login with Google` no fluxo oficial ou configure `GEMINI_API_KEY`.
 
 ### Windows não encontra `claude`
 
@@ -311,4 +344,4 @@ agentrix/
 
 ## Status
 
-O Agentrix está em desenvolvimento. A base atual já permite rodar workspaces locais com Codex e Claude Code, mas novas funções ainda podem mudar conforme o app evolui.
+O Agentrix está em desenvolvimento. A base atual já permite rodar workspaces locais com Codex, Claude Code e Gemini CLI, mas novas funções ainda podem mudar conforme o app evolui.

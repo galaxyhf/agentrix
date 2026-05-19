@@ -40,6 +40,19 @@ const defaultSettings: AgentrixSettings = {
   workspaceProfiles: [],
 };
 
+const defaultConnections: ProviderConnection[] = [
+  { provider: "claude-code", connected: false },
+  { provider: "codex", connected: false },
+  { provider: "gemini", connected: false },
+];
+
+function normalizeConnections(connections: ProviderConnection[] | undefined): ProviderConnection[] {
+  return defaultConnections.map((fallback) => ({
+    ...fallback,
+    ...connections?.find((connection) => connection.provider === fallback.provider),
+  }));
+}
+
 function normalizeWorkspaceProfiles(profiles: Array<Partial<WorkspaceProfile> & { provider?: AgentModel; terminalCount?: number }> | undefined): WorkspaceProfile[] {
   if (!Array.isArray(profiles)) {
     return [];
@@ -51,15 +64,17 @@ function normalizeWorkspaceProfiles(profiles: Array<Partial<WorkspaceProfile> & 
       const legacyTerminalCount = Math.max(1, Math.floor(profile.terminalCount || 1));
       const legacyCodexCount = profile.provider === "codex" ? legacyTerminalCount : 0;
       const legacyClaudeCount = profile.provider === "claude-code" ? legacyTerminalCount : 0;
+      const legacyGeminiCount = profile.provider === "gemini" ? legacyTerminalCount : 0;
       return {
         id: profile.id || id(),
         name: profile.name?.trim() ?? "Perfil",
         codexCount: Math.max(0, Math.floor(profile.codexCount ?? legacyCodexCount)),
         claudeCount: Math.max(0, Math.floor(profile.claudeCount ?? legacyClaudeCount)),
+        geminiCount: Math.max(0, Math.floor(profile.geminiCount ?? legacyGeminiCount)),
         updatedAt: profile.updatedAt || now(),
       };
     })
-    .filter((profile) => profile.codexCount + profile.claudeCount > 0);
+    .filter((profile) => profile.codexCount + profile.claudeCount + profile.geminiCount > 0);
 }
 
 function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): AgentrixSettings {
@@ -125,7 +140,7 @@ interface AppState {
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveWorkspacePath: (path: string) => void;
   addWorkspace: (path?: string, name?: string) => void;
-  configureWorkspace: (workspaceId: string, codexCount: number, claudeCount: number, pendingCommand?: string) => void;
+  configureWorkspace: (workspaceId: string, codexCount: number, claudeCount: number, geminiCount: number, pendingCommand?: string) => void;
   saveWorkspaceProfile: (profile: Omit<WorkspaceProfile, "id" | "updatedAt"> & { id?: string }) => void;
   removeWorkspaceProfile: (profileId: string) => void;
   removeWorkspace: (workspaceId: string) => void;
@@ -195,10 +210,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settingsOpen: false,
   workspaces: [],
   agents: initialAgents,
-  connections: [
-    { provider: "claude-code", connected: false },
-    { provider: "codex", connected: false },
-  ],
+  connections: defaultConnections,
   logs: [],
   settings: defaultSettings,
   setAuthenticated: (authenticated) => {
@@ -262,7 +274,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     void get().save();
   },
-  configureWorkspace: (workspaceId, codexCount, claudeCount, pendingCommand) => {
+  configureWorkspace: (workspaceId, codexCount, claudeCount, geminiCount, pendingCommand) => {
     const state = get();
     const workspace = state.workspaces.find((item) => item.id === workspaceId);
     if (!workspace) {
@@ -279,7 +291,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     const maxAgents = state.settings.maxAgents;
     const requestedCodexCount = Math.max(0, Math.floor(codexCount));
     const requestedClaudeCount = Math.max(0, Math.floor(claudeCount));
-    const requestedTotal = requestedCodexCount + requestedClaudeCount;
+    const requestedGeminiCount = Math.max(0, Math.floor(geminiCount));
+    const requestedTotal = requestedCodexCount + requestedClaudeCount + requestedGeminiCount;
     if (requestedTotal === 0) {
       state.addLog(state.activeAgentId, "warn", "Escolha pelo menos um terminal para criar.");
       return;
@@ -287,9 +300,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const finalCodexCount = Math.min(requestedCodexCount, maxAgents);
     const finalClaudeCount = Math.min(requestedClaudeCount, maxAgents - finalCodexCount);
+    const finalGeminiCount = Math.min(requestedGeminiCount, maxAgents - finalCodexCount - finalClaudeCount);
     const terminalSpecs = [
       ...Array.from({ length: finalCodexCount }, () => "codex" as const),
       ...Array.from({ length: finalClaudeCount }, () => "claude-code" as const),
+      ...Array.from({ length: finalGeminiCount }, () => "gemini" as const),
     ];
 
     const agents = terminalSpecs.map((provider, index) => {
@@ -317,7 +332,8 @@ export const useAppStore = create<AppState>((set, get) => ({
 
     const codexCount = Math.max(0, Math.floor(profile.codexCount));
     const claudeCount = Math.max(0, Math.floor(profile.claudeCount));
-    if (codexCount + claudeCount === 0) {
+    const geminiCount = Math.max(0, Math.floor(profile.geminiCount));
+    if (codexCount + claudeCount + geminiCount === 0) {
       get().addLog(get().activeAgentId, "warn", "Escolha pelo menos um terminal para salvar o perfil.");
       return;
     }
@@ -327,6 +343,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       name: cleanName,
       codexCount: Math.min(get().settings.maxAgents, codexCount),
       claudeCount: Math.min(get().settings.maxAgents, claudeCount),
+      geminiCount: Math.min(get().settings.maxAgents, geminiCount),
       updatedAt: now(),
     };
 
@@ -493,10 +510,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       settingsOpen: false,
       workspaces: [],
       agents: [],
-      connections: [
-        { provider: "claude-code", connected: false },
-        { provider: "codex", connected: false },
-      ],
+      connections: defaultConnections,
       logs: [],
       settings: defaultSettings,
     });
@@ -523,6 +537,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...persisted,
         workspaces,
         agents,
+        connections: normalizeConnections(persisted.connections),
         activeWorkspaceId,
         activeAgentId,
         settings: normalizeSettings(persisted.settings),

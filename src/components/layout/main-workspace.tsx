@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Bot, Code2, FolderOpen, Grid3X3, Minus, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { Bot, Code2, FolderOpen, Grid3X3, Minus, Pencil, Plus, Save, Sparkles, Trash2 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { TerminalPane } from "@/components/terminal/terminal-pane";
@@ -43,7 +44,7 @@ export function MainWorkspace() {
   if (activeWorkspaceAgents.length === 0) {
     return (
       <main className="relative min-w-0 flex-1 overflow-hidden bg-background">
-        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(codexCount, claudeCount) => configureWorkspace(activeWorkspace.id, codexCount, claudeCount)} />
+        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(codexCount, claudeCount, geminiCount) => configureWorkspace(activeWorkspace.id, codexCount, claudeCount, geminiCount)} />
       </main>
     );
   }
@@ -120,7 +121,7 @@ function gridColumnCount(count: number) {
 interface WorkspaceSetupProps {
   workspaceName: string;
   workspacePath: string;
-  onStart: (codexCount: number, claudeCount: number) => void;
+  onStart: (codexCount: number, claudeCount: number, geminiCount: number) => void;
 }
 
 function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetupProps) {
@@ -130,23 +131,27 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
   const availableSlots = settings.maxAgents;
   const [codexCount, setCodexCount] = useState(availableSlots >= 2 ? 1 : Math.min(1, availableSlots));
   const [claudeCount, setClaudeCount] = useState(availableSlots >= 2 ? 1 : 0);
+  const [geminiCount, setGeminiCount] = useState(0);
   const [profileName, setProfileName] = useState("");
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
-  const totalCount = codexCount + claudeCount;
+  const totalCount = codexCount + claudeCount + geminiCount;
   const canCreateTerminals = totalCount > 0;
   const profiles = settings.workspaceProfiles;
 
   function updateCodexCount(next: number) {
-    const normalized = Math.min(Math.max(0, next), availableSlots);
+    const normalized = Math.min(Math.max(0, next), Math.max(0, availableSlots - claudeCount - geminiCount));
     setCodexCount(normalized);
-    setClaudeCount((current) => Math.min(current, Math.max(0, availableSlots - normalized)));
   }
 
   function updateClaudeCount(next: number) {
-    const normalized = Math.min(Math.max(0, next), availableSlots);
+    const normalized = Math.min(Math.max(0, next), Math.max(0, availableSlots - codexCount - geminiCount));
     setClaudeCount(normalized);
-    setCodexCount((current) => Math.min(current, Math.max(0, availableSlots - normalized)));
+  }
+
+  function updateGeminiCount(next: number) {
+    const normalized = Math.min(Math.max(0, next), Math.max(0, availableSlots - codexCount - claudeCount));
+    setGeminiCount(normalized);
   }
 
   function saveProfile() {
@@ -155,6 +160,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
       name: profileName,
       codexCount,
       claudeCount,
+      geminiCount,
     });
     setProfileName("");
     setEditingProfileId(null);
@@ -167,10 +173,12 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
     }
     const nextCodexCount = Math.min(profile.codexCount, availableSlots);
     const nextClaudeCount = Math.min(profile.claudeCount, Math.max(0, availableSlots - nextCodexCount));
+    const nextGeminiCount = Math.min(profile.geminiCount, Math.max(0, availableSlots - nextCodexCount - nextClaudeCount));
     setCodexCount(nextCodexCount);
     setClaudeCount(nextClaudeCount);
+    setGeminiCount(nextGeminiCount);
     setSelectedProfileId(profile.id);
-    onStart(nextCodexCount, nextClaudeCount);
+    onStart(nextCodexCount, nextClaudeCount, nextGeminiCount);
   }
 
   function editProfile(profileId: string) {
@@ -182,6 +190,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
     setProfileName(profile.name);
     setCodexCount(Math.min(profile.codexCount, availableSlots));
     setClaudeCount(Math.min(profile.claudeCount, Math.max(0, availableSlots - profile.codexCount)));
+    setGeminiCount(Math.min(profile.geminiCount, Math.max(0, availableSlots - profile.codexCount - profile.claudeCount)));
   }
 
   return (
@@ -193,14 +202,14 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           <p className="mt-2 max-w-2xl truncate text-xs text-text-muted">{workspacePath}</p>
         </div>
 
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-4 lg:grid-cols-3">
             <section className="rounded-md border bg-background p-4">
               <TerminalCountControl
                 icon={Code2}
                 label="Codex"
                 description="Terminais que abrem direto no Codex CLI."
                 value={codexCount}
-                max={availableSlots}
+                max={availableSlots - claudeCount - geminiCount}
                 onChange={updateCodexCount}
               />
             </section>
@@ -211,8 +220,19 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
                 label="Claude Code"
                 description="Terminais que abrem direto no Claude Code CLI."
                 value={claudeCount}
-                max={availableSlots}
+                max={availableSlots - codexCount - geminiCount}
                 onChange={updateClaudeCount}
+              />
+            </section>
+
+            <section className="rounded-md border bg-background p-4">
+              <TerminalCountControl
+                icon={Sparkles}
+                label="Gemini CLI"
+                description="Terminais que abrem direto no Gemini CLI."
+                value={geminiCount}
+                max={availableSlots - codexCount - claudeCount}
+                onChange={updateGeminiCount}
               />
             </section>
           </div>
@@ -260,7 +280,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
                         </span>
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-text">{profile.name}</p>
-                          <p className="mt-1 truncate text-xs text-text-muted">{profileSummary(profile.codexCount, profile.claudeCount)}</p>
+                          <p className="mt-1 truncate text-xs text-text-muted">{profileSummary(profile.codexCount, profile.claudeCount, profile.geminiCount)}</p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
                           <Button
@@ -316,7 +336,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           </section>
 
           <div className="mt-5 flex justify-end">
-            <Button onClick={() => onStart(codexCount, claudeCount)} disabled={!canCreateTerminals} className="gap-2">
+            <Button onClick={() => onStart(codexCount, claudeCount, geminiCount)} disabled={!canCreateTerminals} className="gap-2">
               <Plus />
               Criar terminais
             </Button>
@@ -326,7 +346,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
   );
 }
 
-function profileSummary(codexCount: number, claudeCount: number) {
+function profileSummary(codexCount: number, claudeCount: number, geminiCount: number) {
   const parts = [];
   if (codexCount > 0) {
     parts.push(`Codex ${codexCount}`);
@@ -334,11 +354,14 @@ function profileSummary(codexCount: number, claudeCount: number) {
   if (claudeCount > 0) {
     parts.push(`Claude ${claudeCount}`);
   }
+  if (geminiCount > 0) {
+    parts.push(`Gemini ${geminiCount}`);
+  }
   return parts.join(" / ");
 }
 
 interface TerminalCountControlProps {
-  icon: typeof Code2;
+  icon: LucideIcon;
   label: string;
   description: string;
   value: number;
@@ -365,7 +388,7 @@ function TerminalCountControl({ icon: Icon, label, description, value, max, onCh
         <div className="grid h-16 min-w-0 flex-1 place-items-center rounded-md border bg-surface">
           <span className="text-3xl font-semibold leading-none text-text">{value}</span>
         </div>
-        <Button variant="outline" size="icon" onClick={() => onChange(value + 1)} disabled={max <= 0} aria-label={`Aumentar ${label}`}>
+        <Button variant="outline" size="icon" onClick={() => onChange(value + 1)} disabled={value >= max} aria-label={`Aumentar ${label}`}>
           <Plus />
         </Button>
       </div>

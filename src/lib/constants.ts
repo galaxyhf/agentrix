@@ -26,6 +26,7 @@ export const DEFAULT_TEMPLATES: AgentTemplate[] = [
 export const MODEL_COST_PER_1K: Record<string, number> = {
   "claude-code": 0.015,
   codex: 0.01,
+  gemini: 0.0,
 };
 
 export interface CliModelOption {
@@ -122,5 +123,19 @@ export const CLI_MODELS: CliModelOption[] = [
     label: "GPT-5 Codex",
     description: "Versao GPT-5 otimizada para ambientes Codex.",
     reasoning: ["minimal", "low", "medium", "high"],
+  },
+  {
+    provider: "gemini",
+    id: "gemini-2.5-pro",
+    label: "Gemini 2.5 Pro",
+    description: "Modelo padrao do Gemini CLI para tarefas de codigo.",
+    reasoning: ["none"],
+  },
+  {
+    provider: "gemini",
+    id: "gemini-2.5-flash",
+    label: "Gemini 2.5 Flash",
+    description: "Modelo Gemini mais rapido para iteracoes leves.",
+    reasoning: ["none"],
   },
 ];

@@ -1,5 +1,5 @@
 export type AgentRole = "CODER" | "THINKER" | "REVIEWER" | "RESEARCHER" | "CUSTOM";
-export type AgentModel = "claude-code" | "codex";
+export type AgentModel = "claude-code" | "codex" | "gemini";
 export type AgentStatus = "idle" | "running" | "waiting" | "error";
 export type ReasoningEffort = "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
 
@@ -8,6 +8,7 @@ export interface WorkspaceProfile {
   name: string;
   codexCount: number;
   claudeCount: number;
+  geminiCount: number;
   updatedAt: string;
 }
 

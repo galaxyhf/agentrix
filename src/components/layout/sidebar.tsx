@@ -1,4 +1,4 @@
-import { Bot, Code2, PanelLeftClose, PanelLeftOpen, Plus, Settings, Trash2 } from "lucide-react";
+import { Bot, Code2, PanelLeftClose, PanelLeftOpen, Plus, Settings, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -128,11 +128,11 @@ export function Sidebar() {
   }
 
   return (
-    <aside className="flex h-full w-80 shrink-0 flex-col border-r bg-surface transition-[width] duration-200 ease-out">
-      <div className="border-b p-3">
-        <div>
-          <h1 className="text-lg font-semibold leading-none">AGENTRIX</h1>
-          <p className="mt-1 text-xs text-text-muted">v0.2.0</p>
+    <aside className="flex h-full w-72 shrink-0 flex-col border-r bg-surface transition-[width] duration-200 ease-out">
+      <div className="border-b px-3 py-2">
+        <div className="flex items-baseline gap-2">
+          <h1 className="text-base font-semibold leading-none">AGENTRIX</h1>
+          <p className="text-[0.7rem] text-text-muted">v0.2.0</p>
         </div>
       </div>
 
@@ -203,15 +203,26 @@ export function Sidebar() {
             const claudeCount = workspaceAgents.filter(
               (agent) => agent.model === "claude-code",
             ).length;
-            const ProviderIcon = claudeCount > codexCount ? Bot : Code2;
+            const geminiCount = workspaceAgents.filter(
+              (agent) => agent.model === "gemini",
+            ).length;
+            const ProviderIcon =
+              [
+                { count: codexCount, icon: Code2 },
+                { count: claudeCount, icon: Bot },
+                { count: geminiCount, icon: Sparkles },
+              ].sort((left, right) => right.count - left.count)[0]?.icon ??
+              Code2;
             const providerLabel =
               workspaceAgents.length === 0
                 ? "Configurar"
-                : claudeCount > 0 && codexCount > 0
-                  ? `Codex ${codexCount} / Claude ${claudeCount}`
-                  : claudeCount > 0
-                    ? "Claude Code"
-                    : "Codex";
+                : [
+                    codexCount > 0 ? "Codex" : null,
+                    claudeCount > 0 ? "Claude" : null,
+                    geminiCount > 0 ? "Gemini" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ");
             const terminalLabel =
               workspaceAgents.length === 0
                 ? "sem terminais"

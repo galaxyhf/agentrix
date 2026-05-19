@@ -68,6 +68,7 @@ struct StartTerminalRequest {
 enum AgentModel {
     ClaudeCode,
     Codex,
+    Gemini,
 }
 
 #[derive(Debug, Deserialize)]
@@ -150,6 +151,7 @@ fn start_agent_session(
     let program = match request.model {
         AgentModel::ClaudeCode => cli_binary("claude"),
         AgentModel::Codex => cli_binary("codex"),
+        AgentModel::Gemini => cli_binary("gemini"),
     };
 
     let pty_system = native_pty_system();
@@ -178,6 +180,12 @@ fn start_agent_session(
             if let Some(effort) = codex_reasoning_effort(&request.reasoning_effort) {
                 command.arg("-c");
                 command.arg(format!("model_reasoning_effort=\"{effort}\""));
+            }
+        }
+        AgentModel::Gemini => {
+            if !request.model_id.trim().is_empty() {
+                command.arg("--model");
+                command.arg(&request.model_id);
             }
         }
     }
@@ -394,6 +402,12 @@ fn check_cli_status(provider: String) -> Result<CliStatusPayload, String> {
             install_hint: "npm install -g @openai/codex",
             login_hint: "codex --login",
         },
+        "gemini" => CliSpec {
+            provider: "gemini",
+            binary: "gemini",
+            install_hint: "npm install -g @google/gemini-cli",
+            login_hint: "gemini",
+        },
         _ => return Err("Unknown provider".to_string()),
     };
 
@@ -503,7 +517,48 @@ fn check_cli_auth(provider: &str, binary: &str) -> (bool, Option<String>) {
                 Some(format!("Falha ao validar login do Claude Code: {error}")),
             ),
         },
+        "gemini" => {
+            if env_var_is_present("GEMINI_API_KEY")
+                || env_var_is_present("GOOGLE_API_KEY")
+                || env_var_is_present("GOOGLE_APPLICATION_CREDENTIALS")
+            {
+                return (
+                    true,
+                    Some("Credencial Gemini encontrada no ambiente do app.".to_string()),
+                );
+            }
+
+            if gemini_oauth_credentials_exist() {
+                return (
+                    true,
+                    Some("Credenciais OAuth do Gemini encontradas em ~/.gemini.".to_string()),
+                );
+            }
+
+            (
+                false,
+                Some("Gemini CLI instalado, mas login nao confirmado. Rode gemini e escolha Login with Google ou configure GEMINI_API_KEY.".to_string()),
+            )
+        }
         _ => (false, Some("Provider desconhecido.".to_string())),
+    }
+}
+
+fn gemini_oauth_credentials_exist() -> bool {
+    home_dir()
+        .map(|home| home.join(".gemini").join("oauth_creds.json").is_file())
+        .unwrap_or(false)
+}
+
+fn home_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        env::var_os("USERPROFILE").map(PathBuf::from)
+    }
+
+    #[cfg(not(windows))]
+    {
+        env::var_os("HOME").map(PathBuf::from)
     }
 }
 
@@ -706,6 +761,7 @@ fn provider_label(model: &AgentModel) -> &'static str {
     match model {
         AgentModel::ClaudeCode => "claude-code",
         AgentModel::Codex => "codex",
+        AgentModel::Gemini => "gemini",
     }
 }
 
