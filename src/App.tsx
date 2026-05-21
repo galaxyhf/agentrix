@@ -8,7 +8,7 @@ import { LoginPage } from "@/pages/login-page";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useAppStore } from "@/store/app-store";
 import { listenTauri } from "@/lib/tauri";
-import type { AgentStatus, TokenUsage } from "@/lib/types";
+import type { AgentrixSettings, AgentStatus, TokenUsage } from "@/lib/types";
 
 interface StatusPayload {
   agentId: string;
@@ -28,6 +28,9 @@ interface OutputPayload {
   data: string;
 }
 
+type ThemeVariables = Partial<Record<`--${string}`, string>>;
+type AppThemeStyle = CSSProperties & ThemeVariables;
+
 export default function App() {
   const booted = useAppStore((state) => state.booted);
   const authenticated = useAppStore((state) => state.authenticated);
@@ -44,6 +47,16 @@ export default function App() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const variables = themeVariables(settings);
+    Object.entries(variables).forEach(([property, value]) => {
+      if (value === undefined) {
+        return;
+      }
+      document.documentElement.style.setProperty(property, value);
+    });
+  }, [settings.accent, settings.colorTheme]);
 
   useEffect(() => {
     function toggleSidebar(event: KeyboardEvent) {
@@ -167,7 +180,7 @@ export default function App() {
       <div
         className="flex h-full overflow-hidden bg-background text-text"
         data-density={settings.density}
-        style={appStyle(settings.accent, settings.zoom)}
+        style={appStyle(settings)}
       >
         <Sidebar />
         <MainWorkspace />
@@ -177,19 +190,56 @@ export default function App() {
   );
 }
 
-function appStyle(accent: "violet" | "purple" | "fuchsia" | "red", zoom: number): CSSProperties {
+function appStyle(settings: AgentrixSettings): AppThemeStyle {
+  return {
+    ...themeVariables(settings),
+    zoom: `${Math.min(150, Math.max(75, settings.zoom))}%`,
+  };
+}
+
+function themeVariables(settings: AgentrixSettings): ThemeVariables {
   const accents = {
     violet: { accent: "#7c3aed", hover: "#a855f7", ring: "168 85 247" },
     purple: { accent: "#9333ea", hover: "#c084fc", ring: "192 132 252" },
     fuchsia: { accent: "#c026d3", hover: "#e879f9", ring: "232 121 249" },
     red: { accent: "#dc2626", hover: "#ef4444", ring: "239 68 68" },
   };
-  const selected = accents[accent];
+  const colorThemes = {
+    default: {
+      "--color-background": "#0d0d0f",
+      "--color-surface": "#110e1c",
+      "--color-card": "#1a1428",
+      "--color-border": "#2a1f4a",
+      "--color-terminal-bg": "#090911",
+      "--background": "13 13 15",
+      "--card": "26 20 40",
+      "--popover": "17 14 28",
+      "--secondary": "26 20 40",
+      "--muted": "17 14 28",
+      "--border": "42 31 74",
+      "--input": "21 15 37",
+    },
+    "full-black": {
+      "--color-background": "#000000",
+      "--color-surface": "#050505",
+      "--color-card": "#080808",
+      "--color-border": "#1a1a1a",
+      "--color-terminal-bg": "#000000",
+      "--background": "0 0 0",
+      "--card": "8 8 8",
+      "--popover": "5 5 5",
+      "--secondary": "8 8 8",
+      "--muted": "5 5 5",
+      "--border": "26 26 26",
+      "--input": "12 12 12",
+    },
+  } satisfies Record<AgentrixSettings["colorTheme"], ThemeVariables>;
+  const selected = accents[settings.accent];
 
   return {
+    ...colorThemes[settings.colorTheme],
     "--color-accent": selected.accent,
     "--color-accent-hover": selected.hover,
     "--ring": selected.ring,
-    zoom: `${Math.min(150, Math.max(75, zoom))}%`,
-  } as CSSProperties;
+  };
 }

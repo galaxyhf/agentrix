@@ -65,6 +65,7 @@ export interface ProviderConnection {
 export interface AgentrixSettings {
   fontSize: number;
   density: "compact" | "comfortable" | "spacious";
+  colorTheme: "default" | "full-black";
   accent: "violet" | "purple" | "fuchsia" | "red";
   zoom: number;
   cursorBlink: boolean;

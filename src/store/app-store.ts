@@ -15,6 +15,7 @@ const emptyUsage: TokenUsage = {
 const defaultSettings: AgentrixSettings = {
   fontSize: 13,
   density: "comfortable",
+  colorTheme: "default",
   accent: "violet",
   zoom: 100,
   cursorBlink: true,
@@ -81,6 +82,7 @@ function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): Age
   return {
     fontSize: settings?.fontSize ?? defaultSettings.fontSize,
     density: settings?.density ?? defaultSettings.density,
+    colorTheme: settings?.colorTheme ?? defaultSettings.colorTheme,
     accent: settings?.accent ?? defaultSettings.accent,
     zoom: settings?.zoom ?? defaultSettings.zoom,
     cursorBlink: settings?.cursorBlink ?? defaultSettings.cursorBlink,

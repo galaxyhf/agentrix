@@ -262,6 +262,7 @@ export function SettingsDialog() {
                   <SettingGrid>
                     <NumberField label="Tamanho da fonte" value={settings.fontSize} min={10} max={22} onChange={(fontSize) => updateSettings({ fontSize })} />
                     <SelectField label="Densidade" value={settings.density} options={["compact", "comfortable", "spacious"]} onChange={(density) => updateSettings({ density: density as typeof settings.density })} />
+                    <SelectField label="Tema de cor" value={settings.colorTheme} options={["default", "full-black"]} onChange={(colorTheme) => updateSettings({ colorTheme: colorTheme as typeof settings.colorTheme })} />
                     <SelectField label="Accent de cor" value={settings.accent} options={["violet", "purple", "fuchsia", "red"]} onChange={(accent) => updateSettings({ accent: accent as typeof settings.accent })} />
                     <LayoutModeField value={settings.workspaceLayout} onChange={(workspaceLayout) => updateSettings({ workspaceLayout })} />
                     <NumberField label="Zoom da interface" value={settings.zoom} min={75} max={150} onChange={(zoom) => updateSettings({ zoom })} />
