@@ -75,6 +75,38 @@ export async function resizeAgentSession(sessionId: string, rows: number, cols: 
   await invoke("resize_agent_session", { sessionId, rows, cols });
 }
 
+export async function browserNavigate(url: string) {
+  if (!isTauri()) {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("browser_navigate", { url });
+}
+
+export async function browserBack() {
+  if (!isTauri()) {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("browser_back");
+}
+
+export async function browserForward() {
+  if (!isTauri()) {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("browser_forward");
+}
+
+export async function browserReload() {
+  if (!isTauri()) {
+    return;
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("browser_reload");
+}
+
 export async function checkCliStatus(provider: AgentModel) {
   if (!isTauri()) {
     return {

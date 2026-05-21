@@ -1,11 +1,13 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
-import { Loader2 } from "lucide-react";
+import { Chrome, Loader2 } from "lucide-react";
+import { BrowserDock } from "@/components/browser/browser-dock";
 import { Sidebar } from "@/components/layout/sidebar";
 import { MainWorkspace } from "@/components/layout/main-workspace";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import { LoginPage } from "@/pages/login-page";
-import { TooltipProvider } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAppStore } from "@/store/app-store";
 import { listenTauri } from "@/lib/tauri";
 import type { AgentrixSettings, AgentStatus, TokenUsage } from "@/lib/types";
@@ -42,6 +44,7 @@ export default function App() {
   const addWorkspace = useAppStore((state) => state.addWorkspace);
   const addLog = useAppStore((state) => state.addLog);
   const settings = useAppStore((state) => state.settings);
+  const [browserOpen, setBrowserOpen] = useState(false);
   const activityTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
 
   useEffect(() => {
@@ -183,7 +186,28 @@ export default function App() {
         style={appStyle(settings)}
       >
         <Sidebar />
-        <MainWorkspace />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-9 shrink-0 items-center justify-end border-b bg-surface px-3">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="icon"
+                  variant={browserOpen ? "default" : "outline"}
+                  className={browserOpen ? "size-7 bg-accent hover:bg-accent-hover" : "size-7"}
+                  onClick={() => setBrowserOpen((current) => !current)}
+                  aria-label={browserOpen ? "Fechar navegador" : "Abrir navegador"}
+                >
+                  <Chrome />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{browserOpen ? "Fechar navegador" : "Abrir navegador"}</TooltipContent>
+            </Tooltip>
+          </header>
+          <div className="flex min-h-0 flex-1 overflow-hidden">
+            <MainWorkspace />
+            <BrowserDock open={browserOpen} />
+          </div>
+        </div>
         <SettingsDialog />
       </div>
     </TooltipProvider>

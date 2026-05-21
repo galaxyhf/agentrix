@@ -9,7 +9,7 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, Url};
 use uuid::Uuid;
 
 type SharedSessions = Arc<Mutex<HashMap<String, PtySession>>>;
@@ -22,6 +22,8 @@ const MENU_APPLY_ZOOM_ID: &str = "agentrix-apply-zoom";
 const MENU_FILL_WINDOW_ID: &str = "agentrix-fill-window";
 #[cfg(target_os = "macos")]
 const MENU_CENTER_WINDOW_ID: &str = "agentrix-center-window";
+
+const BROWSER_WEBVIEW_LABEL: &str = "agentrix-browser";
 
 struct PtySession {
     writer: Box<dyn Write + Send>,
@@ -385,6 +387,95 @@ fn resize_agent_session(
         })
         .map_err(|error| format!("Failed to resize PTY: {error}"))?;
     Ok(())
+}
+
+#[tauri::command]
+fn browser_navigate(app: AppHandle, url: String) -> Result<(), String> {
+    let parsed_url = Url::parse(&url).map_err(|error| format!("URL invalida: {error}"))?;
+    let webview = app
+        .get_webview(BROWSER_WEBVIEW_LABEL)
+        .ok_or_else(|| "Navegador ainda nao foi inicializado.".to_string())?;
+    webview
+        .navigate(parsed_url)
+        .map_err(|error| format!("Falha ao navegar: {error}"))
+}
+
+#[tauri::command]
+fn browser_back(app: AppHandle) -> Result<(), String> {
+    let webview = app
+        .get_webview(BROWSER_WEBVIEW_LABEL)
+        .ok_or_else(|| "Navegador ainda nao foi inicializado.".to_string())?;
+    browser_go_back(webview)
+}
+
+#[tauri::command]
+fn browser_forward(app: AppHandle) -> Result<(), String> {
+    let webview = app
+        .get_webview(BROWSER_WEBVIEW_LABEL)
+        .ok_or_else(|| "Navegador ainda nao foi inicializado.".to_string())?;
+    browser_go_forward(webview)
+}
+
+#[tauri::command]
+fn browser_reload(app: AppHandle) -> Result<(), String> {
+    let webview = app
+        .get_webview(BROWSER_WEBVIEW_LABEL)
+        .ok_or_else(|| "Navegador ainda nao foi inicializado.".to_string())?;
+    browser_reload_webview(webview)
+}
+
+#[cfg(windows)]
+fn browser_go_back(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .with_webview(|platform_webview| unsafe {
+            if let Ok(core_webview) = platform_webview.controller().CoreWebView2() {
+                let _ = core_webview.GoBack();
+            }
+        })
+        .map_err(|error| format!("Falha ao voltar: {error}"))
+}
+
+#[cfg(not(windows))]
+fn browser_go_back(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .eval("history.back()")
+        .map_err(|error| format!("Falha ao voltar: {error}"))
+}
+
+#[cfg(windows)]
+fn browser_go_forward(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .with_webview(|platform_webview| unsafe {
+            if let Ok(core_webview) = platform_webview.controller().CoreWebView2() {
+                let _ = core_webview.GoForward();
+            }
+        })
+        .map_err(|error| format!("Falha ao avancar: {error}"))
+}
+
+#[cfg(not(windows))]
+fn browser_go_forward(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .eval("history.forward()")
+        .map_err(|error| format!("Falha ao avancar: {error}"))
+}
+
+#[cfg(windows)]
+fn browser_reload_webview(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .with_webview(|platform_webview| unsafe {
+            if let Ok(core_webview) = platform_webview.controller().CoreWebView2() {
+                let _ = core_webview.Reload();
+            }
+        })
+        .map_err(|error| format!("Falha ao recarregar: {error}"))
+}
+
+#[cfg(not(windows))]
+fn browser_reload_webview(webview: tauri::Webview) -> Result<(), String> {
+    webview
+        .reload()
+        .map_err(|error| format!("Falha ao recarregar: {error}"))
 }
 
 #[tauri::command]
@@ -1032,10 +1123,14 @@ pub fn run() {
         .on_menu_event(|app, event| {
             #[cfg(target_os = "macos")]
             handle_macos_pt_br_menu_event(app, event);
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
         })
         .setup(|app| {
             #[cfg(target_os = "macos")]
             install_macos_pt_br_menu(app)?;
+            #[cfg(not(target_os = "macos"))]
+            let _ = app;
 
             Ok(())
         })
@@ -1045,6 +1140,10 @@ pub fn run() {
             write_agent_session,
             stop_agent_session,
             resize_agent_session,
+            browser_navigate,
+            browser_back,
+            browser_forward,
+            browser_reload,
             check_cli_status,
             host_platform
         ])
