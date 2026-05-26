@@ -19,7 +19,7 @@ export function LoginPage() {
             <h1 className="text-2xl font-semibold tracking-normal">AGENTRIX</h1>
             <p className="mt-1 text-sm text-text-muted">Desktop AI agent orchestrator</p>
           </div>
-          <Badge>v0.1.0</Badge>
+          <Badge>v0.3.0</Badge>
         </div>
 
         <div className="space-y-4">
