@@ -268,7 +268,6 @@ export function SettingsDialog() {
                     <NumberField label="Zoom da interface" value={settings.zoom} min={75} max={150} onChange={(zoom) => updateSettings({ zoom })} />
                     <TextField label="Shell padrao" value={settings.defaultShell} placeholder="auto" onChange={(defaultShell) => updateSettings({ defaultShell })} />
                     <ToggleField label="Cursor piscando" checked={settings.cursorBlink} onChange={(cursorBlink) => updateSettings({ cursorBlink })} />
-                    <ToggleField label="Codex Yolo Mode" checked={settings.codexYoloMode} onChange={(codexYoloMode) => updateSettings({ codexYoloMode })} />
                     <ToggleField label="Colar com botao direito" checked={settings.pasteOnRightClick} onChange={(pasteOnRightClick) => updateSettings({ pasteOnRightClick })} />
                   </SettingGrid>
                 </TabsContent>
