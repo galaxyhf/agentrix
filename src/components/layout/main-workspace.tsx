@@ -3,6 +3,8 @@ import { Bot, Code2, FolderOpen, Grid3X3, Minus, Pencil, Plus, Save, Sparkles, T
 import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { TerminalPane } from "@/components/terminal/terminal-pane";
 import { cn } from "@/lib/utils";
 import { useAppStore } from "@/store/app-store";
@@ -44,7 +46,7 @@ export function MainWorkspace() {
   if (activeWorkspaceAgents.length === 0) {
     return (
       <main className="relative min-w-0 flex-1 overflow-hidden bg-background">
-        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(codexCount, claudeCount, geminiCount) => configureWorkspace(activeWorkspace.id, codexCount, claudeCount, geminiCount)} />
+        <WorkspaceSetup workspaceName={activeWorkspace.name} workspacePath={activeWorkspace.path} onStart={(codexCount, claudeCount, geminiCount, codexYoloMode) => configureWorkspace(activeWorkspace.id, codexCount, claudeCount, geminiCount, undefined, codexYoloMode)} />
       </main>
     );
   }
@@ -121,7 +123,7 @@ function gridColumnCount(count: number) {
 interface WorkspaceSetupProps {
   workspaceName: string;
   workspacePath: string;
-  onStart: (codexCount: number, claudeCount: number, geminiCount: number) => void;
+  onStart: (codexCount: number, claudeCount: number, geminiCount: number, codexYoloMode: boolean) => void;
 }
 
 function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetupProps) {
@@ -132,6 +134,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
   const [codexCount, setCodexCount] = useState(availableSlots >= 2 ? 1 : Math.min(1, availableSlots));
   const [claudeCount, setClaudeCount] = useState(availableSlots >= 2 ? 1 : 0);
   const [geminiCount, setGeminiCount] = useState(0);
+  const [codexYoloMode, setCodexYoloMode] = useState(settings.codexYoloMode);
   const [profileName, setProfileName] = useState("");
   const [editingProfileId, setEditingProfileId] = useState<string | null>(null);
   const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
@@ -178,7 +181,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
     setClaudeCount(nextClaudeCount);
     setGeminiCount(nextGeminiCount);
     setSelectedProfileId(profile.id);
-    onStart(nextCodexCount, nextClaudeCount, nextGeminiCount);
+    onStart(nextCodexCount, nextClaudeCount, nextGeminiCount, nextCodexCount > 0 && codexYoloMode);
   }
 
   function editProfile(profileId: string) {
@@ -240,6 +243,14 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           <p className="mt-3 text-xs leading-5 text-text-muted">
             Total: {totalCount} de {availableSlots} {availableSlots === 1 ? "terminal" : "terminais"} neste workspace.
           </p>
+
+          <section className="mt-4 flex items-center justify-between gap-4 rounded-md border bg-background p-4">
+            <div className="min-w-0">
+              <Label htmlFor="codex-yolo-mode">Iniciar o Codex no YOLO mode?</Label>
+              <p className="mt-1 text-xs leading-5 text-text-muted">Desativa pedidos de aprovacao e sandbox nos terminais Codex criados agora.</p>
+            </div>
+            <Switch id="codex-yolo-mode" checked={codexYoloMode} disabled={codexCount === 0} onCheckedChange={setCodexYoloMode} />
+          </section>
 
           <section className="mt-4 rounded-md border bg-background p-4">
             <div className="grid gap-4">
@@ -336,7 +347,7 @@ function WorkspaceSetup({ workspaceName, workspacePath, onStart }: WorkspaceSetu
           </section>
 
           <div className="mt-5 flex justify-end">
-            <Button onClick={() => onStart(codexCount, claudeCount, geminiCount)} disabled={!canCreateTerminals} className="gap-2">
+            <Button onClick={() => onStart(codexCount, claudeCount, geminiCount, codexCount > 0 && codexYoloMode)} disabled={!canCreateTerminals} className="gap-2">
               <Plus />
               Criar terminais
             </Button>

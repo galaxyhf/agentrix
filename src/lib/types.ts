@@ -23,6 +23,7 @@ export interface Agent {
   color: string;
   session_id: string | null;
   tokens: TokenUsage;
+  codexYoloMode?: boolean;
   pending_command?: string | null;
 }
 
@@ -69,6 +70,7 @@ export interface AgentrixSettings {
   accent: "violet" | "purple" | "fuchsia" | "red";
   zoom: number;
   cursorBlink: boolean;
+  codexYoloMode: boolean;
   defaultShell: string;
   pasteOnRightClick: boolean;
   sidebarCollapsed: boolean;

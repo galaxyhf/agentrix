@@ -19,6 +19,7 @@ const defaultSettings: AgentrixSettings = {
   accent: "violet",
   zoom: 100,
   cursorBlink: true,
+  codexYoloMode: false,
   defaultShell: "",
   pasteOnRightClick: true,
   sidebarCollapsed: false,
@@ -86,6 +87,7 @@ function normalizeSettings(settings: Partial<AgentrixSettings> | undefined): Age
     accent: settings?.accent ?? defaultSettings.accent,
     zoom: settings?.zoom ?? defaultSettings.zoom,
     cursorBlink: settings?.cursorBlink ?? defaultSettings.cursorBlink,
+    codexYoloMode: settings?.codexYoloMode ?? defaultSettings.codexYoloMode,
     defaultShell: settings?.defaultShell ?? defaultSettings.defaultShell,
     pasteOnRightClick: settings?.pasteOnRightClick ?? defaultSettings.pasteOnRightClick,
     sidebarCollapsed: settings?.sidebarCollapsed ?? defaultSettings.sidebarCollapsed,
@@ -142,7 +144,7 @@ interface AppState {
   setActiveWorkspace: (workspaceId: string) => void;
   setActiveWorkspacePath: (path: string) => void;
   addWorkspace: (path?: string, name?: string) => void;
-  configureWorkspace: (workspaceId: string, codexCount: number, claudeCount: number, geminiCount: number, pendingCommand?: string) => void;
+  configureWorkspace: (workspaceId: string, codexCount: number, claudeCount: number, geminiCount: number, pendingCommand?: string, codexYoloMode?: boolean) => void;
   saveWorkspaceProfile: (profile: Omit<WorkspaceProfile, "id" | "updatedAt"> & { id?: string }) => void;
   removeWorkspaceProfile: (profileId: string) => void;
   removeWorkspace: (workspaceId: string) => void;
@@ -276,7 +278,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
     void get().save();
   },
-  configureWorkspace: (workspaceId, codexCount, claudeCount, geminiCount, pendingCommand) => {
+  configureWorkspace: (workspaceId, codexCount, claudeCount, geminiCount, pendingCommand, codexYoloMode = false) => {
     const state = get();
     const workspace = state.workspaces.find((item) => item.id === workspaceId);
     if (!workspace) {
@@ -314,6 +316,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       return {
         ...createAgent("CODER", providerIndex, workspaceId, terminalSpecs.length === 1 ? workspace.name : `${workspace.name} ${index + 1}`),
         model: provider,
+        codexYoloMode: provider === "codex" ? codexYoloMode : false,
         pending_command: pendingCommand ?? null,
       };
     });

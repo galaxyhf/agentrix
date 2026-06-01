@@ -15,6 +15,7 @@ export interface StartSessionPayload {
   reasoningEffort: ReasoningEffort;
   role: AgentRole;
   systemPrompt: string;
+  codexYoloMode?: boolean;
   cwd?: string;
   rows?: number;
   cols?: number;

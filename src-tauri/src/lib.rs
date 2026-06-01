@@ -45,6 +45,7 @@ struct StartSessionRequest {
     reasoning_effort: ReasoningEffort,
     role: AgentRole,
     system_prompt: String,
+    codex_yolo_mode: Option<bool>,
     cwd: Option<String>,
     rows: Option<u16>,
     cols: Option<u16>,
@@ -182,6 +183,9 @@ fn start_agent_session(
             if let Some(effort) = codex_reasoning_effort(&request.reasoning_effort) {
                 command.arg("-c");
                 command.arg(format!("model_reasoning_effort=\"{effort}\""));
+            }
+            if request.codex_yolo_mode.unwrap_or(false) {
+                command.arg("--dangerously-bypass-approvals-and-sandbox");
             }
         }
         AgentModel::Gemini => {
